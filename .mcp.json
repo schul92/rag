@@ -6,6 +6,20 @@
         "shadcn@latest",
         "mcp"
       ]
+    },
+    "vercel": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@vercel/mcp@latest"
+      ]
+    },
+    "next-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "next-devtools-mcp@latest"
+      ]
     }
   }
 }
