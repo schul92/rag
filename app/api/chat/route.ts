@@ -19,7 +19,7 @@ const VOYAGE_MODEL = 'voyage-3-lite'
 const USE_HYBRID_SEARCH = true     // Enable new hybrid search with RRF (set to false to use legacy)
 const USE_RERANKING = true         // Enable cross-encoder reranking (requires COHERE_API_KEY or HF_TOKEN)
 const RERANK_TOP_N = 10            // Number of candidates to rerank
-const MAX_SUGGESTIONS = 3          // Max number of song suggestions (could be 1-3)
+const MAX_SUGGESTIONS = 2          // Max number of song suggestions
 const SIMILARITY_THRESHOLD_LOW = 0.50  // Lower threshold for vector search
 
 interface VoyageEmbeddingResponse {
@@ -989,7 +989,7 @@ export async function POST(request: NextRequest) {
 
       const songTitles = limitedGroups
         .map(g => g.title)
-        .slice(0, 3)
+        .slice(0, MAX_SUGGESTIONS)
         .join(', ')
 
       // Build conversation context from history
