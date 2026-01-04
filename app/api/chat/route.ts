@@ -181,24 +181,26 @@ interface KeyQuery {
 
 function detectKeyQuery(message: string): KeyQuery {
   // Common key patterns: A, B, C, D, E, F, G with optional #, b, m
-  const keyPatterns = [
+  // Use word boundaries to avoid matching inside words (e.g., "king" should not match)
+  const keyPatterns: Array<{ pattern: RegExp; keyGroup: number }> = [
     // Korean: "A 코드 찬양", "G키 찬양", "C 키 악보"
-    /([A-Ga-g][#b]?m?)\s*(코드|키|key)\s*(찬양|악보|리스트|목록|곡|노래)?/i,
+    { pattern: /\b([A-Ga-g][#b]?m?)\s*(코드|키|key)\s*(찬양|악보|리스트|목록|곡|노래)?/i, keyGroup: 1 },
     // Korean: "A코드 찬양리스트"
-    /([A-Ga-g][#b]?m?)(코드|키)\s*(찬양|악보|리스트|목록|곡|노래)?/i,
-    // English: "key of A", "in A key", "A key songs"
-    /(key\s*of\s*|in\s*)([A-Ga-g][#b]?m?)/i,
-    /([A-Ga-g][#b]?m?)\s*key\s*(songs?|sheets?|list)?/i,
+    { pattern: /\b([A-Ga-g][#b]?m?)(코드|키)\s*(찬양|악보|리스트|목록|곡|노래)?/i, keyGroup: 1 },
+    // English: "key of A", "in key A" (require "key" word to avoid false positives)
+    { pattern: /\bkey\s+of\s+([A-Ga-g][#b]?m?)\b/i, keyGroup: 1 },
+    { pattern: /\bin\s+key\s+([A-Ga-g][#b]?m?)\b/i, keyGroup: 1 },
+    { pattern: /\b([A-Ga-g][#b]?m?)\s+key\s*(songs?|sheets?|list)?\b/i, keyGroup: 1 },
     // Just key at start: "A 찬양", "G 악보"
-    /^([A-Ga-g][#b]?m?)\s+(찬양|악보|곡)/i,
+    { pattern: /^([A-Ga-g][#b]?m?)\s+(찬양|악보|곡)/i, keyGroup: 1 },
   ]
 
-  for (const pattern of keyPatterns) {
+  for (const { pattern, keyGroup } of keyPatterns) {
     const match = message.match(pattern)
     if (match) {
-      // Extract the key (usually group 1 or 2)
-      const key = match[1] || match[2]
-      if (key && key.length <= 3) {  // Valid key format
+      const key = match[keyGroup]
+      // Validate it's a proper musical key (A-G with optional #, b, m)
+      if (key && /^[A-Ga-g][#b]?m?$/.test(key)) {
         return {
           isKeyQuery: true,
           requestedKey: key.toUpperCase(),
@@ -213,16 +215,18 @@ function detectKeyQuery(message: string): KeyQuery {
 
 // Extract key from user query for specific song (e.g., "Holy Forever G키")
 function extractRequestedKey(message: string): string | null {
-  const patterns = [
-    /([A-Ga-g][#b]?m?)\s*(키|코드|key)/i,
-    /(키|코드|key)\s*([A-Ga-g][#b]?m?)/i,
-    /\s([A-Ga-g][#b]?m?)$/i,  // Key at end of message
+  // Patterns with explicit key markers (safer than matching bare letters)
+  const patterns: Array<{ pattern: RegExp; keyGroup: number }> = [
+    // "G키", "A코드", "C key"
+    { pattern: /\b([A-Ga-g][#b]?m?)\s*(키|코드|key)\b/i, keyGroup: 1 },
+    // "키 G", "코드 A", "key C"
+    { pattern: /\b(키|코드|key)\s*([A-Ga-g][#b]?m?)\b/i, keyGroup: 2 },
   ]
 
-  for (const pattern of patterns) {
+  for (const { pattern, keyGroup } of patterns) {
     const match = message.match(pattern)
     if (match) {
-      const key = match[1] || match[2]
+      const key = match[keyGroup]
       if (key && /^[A-Ga-g][#b]?m?$/.test(key)) {
         return key.toUpperCase()
       }
