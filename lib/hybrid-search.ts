@@ -228,11 +228,16 @@ export async function searchNormalized(
       const koreanNorm = normalizeKorean(song.song_title_korean || '')
       const englishNorm = normalizeKorean(song.song_title_english || '')
 
-      return titleNorm.includes(normalizedQuery) ||
+      // Check if query is in any title
+      const queryInTitle = titleNorm.includes(normalizedQuery) ||
              koreanNorm.includes(normalizedQuery) ||
-             englishNorm.includes(normalizedQuery) ||
-             normalizedQuery.includes(titleNorm) ||
-             normalizedQuery.includes(koreanNorm)
+             englishNorm.includes(normalizedQuery)
+
+      // Check if any title is in query (but skip empty strings!)
+      const titleInQuery = (titleNorm.length > 0 && normalizedQuery.includes(titleNorm)) ||
+             (koreanNorm.length > 0 && normalizedQuery.includes(koreanNorm))
+
+      return queryInTitle || titleInQuery
     })
     .slice(0, limit) as SearchResult[]
 }
