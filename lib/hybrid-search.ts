@@ -273,6 +273,12 @@ export async function searchVector(
   threshold: number = 0.5,
   limit: number = 20
 ): Promise<SearchResult[]> {
+  // Skip if no embedding provided
+  if (!queryEmbedding || queryEmbedding.length === 0) {
+    console.log('[Vector Search] Skipped - no embedding provided')
+    return []
+  }
+
   const { data, error } = await supabase
     .rpc('search_songs_by_embedding', {
       query_embedding: queryEmbedding,
