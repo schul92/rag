@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Playwright MCP screenshots
 .playwright-mcp/
+
+# MCP config (contains API keys)
+.mcp.json
