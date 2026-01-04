@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
+import { hybridSearch, RankedResult, normalizeKorean as normalizeKoreanHybrid } from '@/lib/hybrid-search'
+import { rerank } from '@/lib/reranker'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -13,14 +15,12 @@ const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
 const VOYAGE_MODEL = 'voyage-3-lite'
 
-// Google Custom Search API - DISABLED (replaced with Claude suggestions)
-// const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
-// const GOOGLE_SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID
-
 // Configuration
-const SIMILARITY_THRESHOLD = 0.82  // Higher = stricter matching (was 0.75, increased for accuracy)
-const SIMILARITY_THRESHOLD_LOW = 0.70  // Lower threshold for fallback (with text filter)
+const USE_HYBRID_SEARCH = true     // Enable new hybrid search with RRF (set to false to use legacy)
+const USE_RERANKING = true         // Enable cross-encoder reranking (requires COHERE_API_KEY or HF_TOKEN)
+const RERANK_TOP_N = 10            // Number of candidates to rerank
 const MAX_SUGGESTIONS = 3          // Max number of song suggestions (could be 1-3)
+const SIMILARITY_THRESHOLD_LOW = 0.50  // Lower threshold for vector search
 
 interface VoyageEmbeddingResponse {
   data: Array<{ embedding: number[] }>
@@ -695,206 +695,238 @@ export async function POST(request: NextRequest) {
         console.log(`[Key Query] Found ${searchResults.length} songs in key ${keyQuery.requestedKey}`)
       }
     }
-    // CASE 2: Normal song search - PARALLEL SCORING APPROACH
+    // CASE 2: Normal song search - HYBRID SEARCH WITH RRF
     else {
       const cleanSearchTerms = extractSearchTerms(message)
-      const normalizedQuery = normalizeKorean(cleanSearchTerms)
-      console.log(`[Search] Query: "${message}" -> Clean: "${cleanSearchTerms}" -> Normalized: "${normalizedQuery}"`)
-
-      // Run multiple search methods in PARALLEL and combine with scores
-      const scoredResults: ScoredResult[] = []
-
-      // Helper to add scored results (avoiding duplicates)
-      const addScoredResults = (
-        results: SongImageRecord[],
-        score: number,
-        matchType: ScoredResult['matchType'],
-        matchedOn?: string  // What text was matched (for alias/fuzzy matches)
-      ) => {
-        for (const r of results) {
-          // Check if already exists with higher score
-          const existing = scoredResults.find(sr => sr.id === r.id)
-          if (existing) {
-            if (score > existing.score) {
-              existing.score = score
-              existing.matchType = matchType
-              existing.matchedOn = matchedOn || r.song_title
-            }
-          } else {
-            scoredResults.push({
-              id: r.id,
-              image_url: r.image_url,
-              original_filename: r.original_filename,
-              ocr_text: r.ocr_text,
-              song_title: r.song_title,
-              song_key: r.song_key,
-              score,
-              matchType,
-              matchedOn: matchedOn || r.song_title,
-            })
-          }
-        }
-      }
+      console.log(`[Search] Query: "${message}" -> Clean: "${cleanSearchTerms}"`)
 
       if (cleanSearchTerms.length >= 2) {
-        // PARALLEL SEARCH 1: Exact title match (highest priority)
-        const exactMatchPromise = supabase
-          .from('song_images')
-          .select('*')
-          .ilike('song_title', `%${cleanSearchTerms}%`)
-          .limit(10)
+        // NEW: Use hybrid search with Reciprocal Rank Fusion
+        if (USE_HYBRID_SEARCH) {
+          console.log('[Search] Using HYBRID SEARCH with RRF...')
 
-        // PARALLEL SEARCH 2: Normalized Korean match (handle spacing)
-        const normalizedMatchPromise = supabase
-          .from('song_images')
-          .select('*')
-          .not('song_title', 'is', null)
-          .limit(200)
-
-        // PARALLEL SEARCH 3: Alias/translation match (if table exists)
-        const aliasMatchPromise = (async (): Promise<SongImageRecord[]> => {
-          try {
-            const res = await supabase
-              .from('song_aliases')
-              .select('song_title')
-              .ilike('alias', `%${cleanSearchTerms}%`)
-              .limit(10)
-
-            if (res.data && res.data.length > 0) {
-              const titles = res.data.map((a: { song_title: string }) => a.song_title)
-              const { data } = await supabase
-                .from('song_images')
-                .select('*')
-                .in('song_title', titles)
-                .limit(15)
-              return (data || []) as SongImageRecord[]
+          // Generate embedding for vector search
+          let queryEmbedding: number[] = []
+          if (VOYAGE_API_KEY) {
+            try {
+              queryEmbedding = await generateEmbedding(cleanSearchTerms)
+            } catch (embError) {
+              console.error('[Search] Embedding generation failed:', embError)
             }
-            return []
-          } catch {
-            return [] // Table might not exist yet
           }
-        })()
 
-        // Run searches in parallel
-        const [exactResult, allSongsResult, aliasResult] = await Promise.all([
-          exactMatchPromise,
-          normalizedMatchPromise,
-          aliasMatchPromise,
-        ])
-
-        // Process exact matches (score: 1.0)
-        if (exactResult.data && exactResult.data.length > 0) {
-          addScoredResults(exactResult.data as SongImageRecord[], 1.0, 'exact')
-          console.log(`[Exact Match] Found ${exactResult.data.length} exact title matches`)
-        }
-
-        // Process normalized matches (score: 0.95)
-        if (allSongsResult.data && allSongsResult.data.length > 0) {
-          const allSongs = allSongsResult.data as SongImageRecord[]
-
-          // Exact normalized matches
-          const normalizedMatches = allSongs.filter((r: SongImageRecord) => {
-            if (!r.song_title) return false
-            const titleNorm = normalizeKorean(r.song_title)
-            return titleNorm.includes(normalizedQuery) || normalizedQuery.includes(titleNorm)
+          // Execute hybrid search (all methods in parallel + RRF fusion)
+          const hybridResults = await hybridSearch(supabase, cleanSearchTerms, queryEmbedding, {
+            exactLimit: 10,
+            bm25Limit: 20,
+            normalizedLimit: 10,
+            aliasLimit: 10,
+            fuzzyLimit: 10,
+            vectorLimit: 20,
+            ocrLimit: 10,
+            fuzzyThreshold: 0.5,
+            vectorThreshold: SIMILARITY_THRESHOLD_LOW
           })
-          if (normalizedMatches.length > 0) {
-            addScoredResults(normalizedMatches, 0.95, 'normalized')
-            console.log(`[Normalized Match] Found ${normalizedMatches.length} normalized matches`)
-          }
 
-          // Fuzzy title matches (similarity × 0.8) - handles typos
-          const fuzzyTitleMatches = allSongs
-            .filter(r => r.song_title && !normalizedMatches.includes(r))  // Exclude already matched
-            .map(r => ({
-              ...r,
-              fuzzyScore: calculateSimilarity(r.song_title || '', cleanSearchTerms)
-            }))
-            .filter(r => r.fuzzyScore > 0.3)  // Threshold for fuzzy matching
-            .sort((a, b) => b.fuzzyScore - a.fuzzyScore)
-            .slice(0, 10)
-
-          if (fuzzyTitleMatches.length > 0) {
-            for (const r of fuzzyTitleMatches) {
-              addScoredResults([r], r.fuzzyScore * 0.8, 'fuzzy', r.song_title)
+          // Optional: Rerank top candidates with cross-encoder
+          let finalResults: RankedResult[] = hybridResults
+          if (USE_RERANKING && hybridResults.length > 0) {
+            console.log(`[Search] Reranking top ${RERANK_TOP_N} candidates...`)
+            const reranked = await rerank(cleanSearchTerms, hybridResults.slice(0, RERANK_TOP_N * 2), RERANK_TOP_N)
+            if (reranked.length > 0) {
+              finalResults = reranked as RankedResult[]
             }
-            console.log(`[Fuzzy Match] Found ${fuzzyTitleMatches.length} fuzzy title matches`)
           }
+
+          // Convert RankedResult to searchResults format
+          searchResults = finalResults.map(r => ({
+            id: r.id,
+            image_url: r.image_url,
+            original_filename: r.original_filename || '',
+            ocr_text: r.ocr_text || '',
+            song_title: r.song_title || undefined,
+            song_key: r.song_key || undefined,
+            similarity: r.rrf_score,
+            matchType: (r.matched_methods[0] || 'vector') as ScoredResult['matchType'],
+            matchedOn: r.song_title || r.song_title_korean || undefined,
+          }))
+
+          console.log(`[Hybrid Search] Final results: ${searchResults.length}`)
+          searchResults.slice(0, 5).forEach((r, i) => {
+            console.log(`  ${i + 1}. ${r.song_title || r.original_filename} (RRF: ${r.similarity?.toFixed(4)}, methods: ${(finalResults[i] as RankedResult)?.matched_methods?.join(',')})`)
+          })
         }
+        // LEGACY: Old parallel scoring approach (kept for comparison/fallback)
+        else {
+          console.log('[Search] Using LEGACY parallel scoring...')
+          const normalizedQuery = normalizeKorean(cleanSearchTerms)
 
-        // Process alias matches (score: 0.95)
-        if (aliasResult && aliasResult.length > 0) {
-          addScoredResults(aliasResult as SongImageRecord[], 0.95, 'alias')
-          console.log(`[Alias Match] Found ${aliasResult.length} alias matches`)
-        }
+          // Run multiple search methods in PARALLEL and combine with scores
+          const scoredResults: ScoredResult[] = []
 
-        // PARALLEL SEARCH 4: Vector search (only if no high-confidence matches)
-        if (scoredResults.length === 0 && VOYAGE_API_KEY) {
-          try {
-            const queryEmbedding = await generateEmbedding(message)
-            const { data, error } = await supabase.rpc('search_songs_by_embedding', {
-              query_embedding: queryEmbedding,
-              match_threshold: SIMILARITY_THRESHOLD_LOW, // Use lower threshold
-              match_count: 15,
-            })
-
-            if (!error && data && data.length > 0) {
-              // For vector search, use the similarity score directly
-              // NO strict keyword filter - allow semantic matches
-              const vectorResults = data.map((r: SongImageRecord & { similarity?: number }) => ({
-                ...r,
-                score: r.similarity || 0.7,
-              }))
-
-              // But boost results that have text overlap
-              for (const r of vectorResults) {
-                if (hasTextOverlap(r.ocr_text, message, r.song_title)) {
-                  r.score = Math.min(r.score + 0.1, 0.89) // Boost but keep below text matches
+          // Helper to add scored results (avoiding duplicates)
+          const addScoredResults = (
+            results: SongImageRecord[],
+            score: number,
+            matchType: ScoredResult['matchType'],
+            matchedOn?: string
+          ) => {
+            for (const r of results) {
+              const existing = scoredResults.find(sr => sr.id === r.id)
+              if (existing) {
+                if (score > existing.score) {
+                  existing.score = score
+                  existing.matchType = matchType
+                  existing.matchedOn = matchedOn || r.song_title
                 }
-                addScoredResults([r], r.score, 'vector')
+              } else {
+                scoredResults.push({
+                  id: r.id,
+                  image_url: r.image_url,
+                  original_filename: r.original_filename,
+                  ocr_text: r.ocr_text,
+                  song_title: r.song_title,
+                  song_key: r.song_key,
+                  score,
+                  matchType,
+                  matchedOn: matchedOn || r.song_title,
+                })
               }
-              console.log(`[Vector Search] Found ${data.length} semantic matches`)
             }
-          } catch (embError) {
-            console.error('Vector search error:', embError)
           }
-        }
 
-        // FALLBACK: Fuzzy OCR search if still nothing
-        if (scoredResults.length === 0) {
-          const { data } = await supabase
+          // PARALLEL SEARCH 1: Exact title match
+          const exactMatchPromise = supabase
             .from('song_images')
             .select('*')
-            .ilike('ocr_text', `%${cleanSearchTerms}%`)
+            .ilike('song_title', `%${cleanSearchTerms}%`)
             .limit(10)
 
-          if (data && data.length > 0) {
-            addScoredResults(data as SongImageRecord[], 0.75, 'fuzzy')
-            console.log(`[Fuzzy OCR] Found ${data.length} OCR matches`)
+          // PARALLEL SEARCH 2: Normalized Korean match
+          const normalizedMatchPromise = supabase
+            .from('song_images')
+            .select('*')
+            .not('song_title', 'is', null)
+            .limit(200)
+
+          // PARALLEL SEARCH 3: Alias match
+          const aliasMatchPromise = (async (): Promise<SongImageRecord[]> => {
+            try {
+              const res = await supabase
+                .from('song_aliases')
+                .select('song_title')
+                .ilike('alias', `%${cleanSearchTerms}%`)
+                .limit(10)
+
+              if (res.data && res.data.length > 0) {
+                const titles = res.data.map((a: { song_title: string }) => a.song_title)
+                const { data } = await supabase
+                  .from('song_images')
+                  .select('*')
+                  .in('song_title', titles)
+                  .limit(15)
+                return (data || []) as SongImageRecord[]
+              }
+              return []
+            } catch {
+              return []
+            }
+          })()
+
+          const [exactResult, allSongsResult, aliasResult] = await Promise.all([
+            exactMatchPromise,
+            normalizedMatchPromise,
+            aliasMatchPromise,
+          ])
+
+          if (exactResult.data && exactResult.data.length > 0) {
+            addScoredResults(exactResult.data as SongImageRecord[], 1.0, 'exact')
           }
+
+          if (allSongsResult.data && allSongsResult.data.length > 0) {
+            const allSongs = allSongsResult.data as SongImageRecord[]
+            const normalizedMatches = allSongs.filter((r: SongImageRecord) => {
+              if (!r.song_title) return false
+              const titleNorm = normalizeKorean(r.song_title)
+              return titleNorm.includes(normalizedQuery) || normalizedQuery.includes(titleNorm)
+            })
+            if (normalizedMatches.length > 0) {
+              addScoredResults(normalizedMatches, 0.95, 'normalized')
+            }
+
+            const fuzzyTitleMatches = allSongs
+              .filter(r => r.song_title && !normalizedMatches.includes(r))
+              .map(r => ({ ...r, fuzzyScore: calculateSimilarity(r.song_title || '', cleanSearchTerms) }))
+              .filter(r => r.fuzzyScore > 0.3)
+              .sort((a, b) => b.fuzzyScore - a.fuzzyScore)
+              .slice(0, 10)
+
+            if (fuzzyTitleMatches.length > 0) {
+              for (const r of fuzzyTitleMatches) {
+                addScoredResults([r], r.fuzzyScore * 0.8, 'fuzzy', r.song_title)
+              }
+            }
+          }
+
+          if (aliasResult && aliasResult.length > 0) {
+            addScoredResults(aliasResult as SongImageRecord[], 0.95, 'alias')
+          }
+
+          // Vector search as fallback
+          if (scoredResults.length === 0 && VOYAGE_API_KEY) {
+            try {
+              const queryEmbedding = await generateEmbedding(message)
+              const { data, error } = await supabase.rpc('search_songs_by_embedding', {
+                query_embedding: queryEmbedding,
+                match_threshold: SIMILARITY_THRESHOLD_LOW,
+                match_count: 15,
+              })
+
+              if (!error && data && data.length > 0) {
+                const vectorResults = data.map((r: SongImageRecord & { similarity?: number }) => ({
+                  ...r,
+                  score: r.similarity || 0.7,
+                }))
+                for (const r of vectorResults) {
+                  if (hasTextOverlap(r.ocr_text, message, r.song_title)) {
+                    r.score = Math.min(r.score + 0.1, 0.89)
+                  }
+                  addScoredResults([r], r.score, 'vector')
+                }
+              }
+            } catch (embError) {
+              console.error('Vector search error:', embError)
+            }
+          }
+
+          // OCR fallback
+          if (scoredResults.length === 0) {
+            const { data } = await supabase
+              .from('song_images')
+              .select('*')
+              .ilike('ocr_text', `%${cleanSearchTerms}%`)
+              .limit(10)
+
+            if (data && data.length > 0) {
+              addScoredResults(data as SongImageRecord[], 0.75, 'fuzzy')
+            }
+          }
+
+          scoredResults.sort((a, b) => b.score - a.score)
+
+          searchResults = scoredResults.map(r => ({
+            id: r.id,
+            image_url: r.image_url,
+            original_filename: r.original_filename,
+            ocr_text: r.ocr_text,
+            song_title: r.song_title,
+            song_key: r.song_key,
+            similarity: r.score,
+            matchType: r.matchType,
+            matchedOn: r.matchedOn,
+          }))
         }
       }
-
-      // Sort by score (highest first) and convert to searchResults format
-      scoredResults.sort((a, b) => b.score - a.score)
-
-      console.log(`[Scoring] Total scored results: ${scoredResults.length}`)
-      scoredResults.slice(0, 5).forEach((r, i) => {
-        console.log(`  ${i + 1}. ${r.song_title || r.original_filename} (score: ${r.score.toFixed(2)}, type: ${r.matchType})`)
-      })
-
-      // Convert to searchResults format
-      searchResults = scoredResults.map(r => ({
-        id: r.id,
-        image_url: r.image_url,
-        original_filename: r.original_filename,
-        ocr_text: r.ocr_text,
-        song_title: r.song_title,
-        song_key: r.song_key,
-        similarity: r.score,
-        matchType: r.matchType,
-        matchedOn: r.matchedOn,
-      }))
     }
 
     // No Google fallback - will use Claude suggestions instead if no results
