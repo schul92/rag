@@ -172,11 +172,35 @@ function extractSearchTerms(query: string): string {
   return clean.trim()
 }
 
+// Extract requested count from message (e.g., "5개", "10곡", "3 songs")
+function extractRequestedCount(message: string): number | null {
+  const patterns = [
+    /(\d+)\s*개/,           // Korean: "5개"
+    /(\d+)\s*곡/,           // Korean: "5곡"
+    /(\d+)\s*(songs?|sheets?|results?)/i,  // English
+    /top\s*(\d+)/i,         // "top 5"
+    /(\d+)\s*장/,           // Korean: "5장"
+  ]
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern)
+    if (match) {
+      const count = parseInt(match[1], 10)
+      // Reasonable limits: 1-20
+      if (count >= 1 && count <= 20) {
+        return count
+      }
+    }
+  }
+  return null
+}
+
 // Detect if user is asking for songs by key (e.g., "A 코드 찬양리스트", "G키 찬양")
 interface KeyQuery {
   isKeyQuery: boolean
   requestedKey?: string
   songQuery?: string
+  requestedCount?: number
 }
 
 function detectKeyQuery(message: string): KeyQuery {
@@ -205,12 +229,13 @@ function detectKeyQuery(message: string): KeyQuery {
           isKeyQuery: true,
           requestedKey: key.toUpperCase(),
           songQuery: message.replace(pattern, '').trim(),
+          requestedCount: extractRequestedCount(message) || undefined,
         }
       }
     }
   }
 
-  return { isKeyQuery: false }
+  return { isKeyQuery: false, requestedCount: extractRequestedCount(message) || undefined }
 }
 
 // Extract key from user query for specific song (e.g., "Holy Forever G키")
@@ -254,6 +279,37 @@ function extractSongTitle(ocrText?: string): string {
   }
 
   return lines[0]?.toLowerCase().substring(0, 30) || ''
+}
+
+// Normalize title for deduplication - extracts core title removing variations
+function normalizeTitleForDedup(title: string): string {
+  if (!title) return ''
+
+  let normalized = title.toLowerCase().trim()
+
+  // Remove common suffixes/variations: key letters, parentheses content, numbers
+  normalized = normalized
+    .replace(/\s*[\(\[\{][^\)\]\}]*[\)\]\}]\s*/g, ' ')  // Remove (anything), [anything], {anything}
+    .replace(/\s+[A-Ga-g][#b]?m?\s*/g, ' ')              // Remove standalone key letters like " E " or " Am "
+    .replace(/\s*-\s*\d+\s*$/g, '')                       // Remove trailing " - 1", " - 2"
+    .replace(/\s*\d+\s*$/g, '')                           // Remove trailing numbers
+    .replace(/\s+/g, ' ')                                 // Normalize whitespace
+    .trim()
+
+  // Remove duplicate consecutive words (common in OCR)
+  const words = normalized.split(' ')
+  const deduped: string[] = []
+  for (const word of words) {
+    if (deduped.length === 0 || deduped[deduped.length - 1] !== word) {
+      deduped.push(word)
+    }
+  }
+  normalized = deduped.join(' ')
+
+  // Take only first 3-4 significant words (the actual title)
+  const significantWords = normalized.split(' ').filter(w => w.length >= 2).slice(0, 4)
+
+  return significantWords.join(' ')
 }
 
 // Detect if user is asking for a specific song (not key list)
@@ -445,15 +501,27 @@ function generateSmartResponse(options: SmartResponseOptions): string {
 
   // Key list query response (e.g., "A 코드 찬양리스트")
   if (isKeyListQuery && requestedKey) {
-    // Use clean song_title when available
-    const titles = results
+    // Get UNIQUE song titles (not individual pages)
+    const allTitles = results
       .map(r => r.song_title || r.ocr_text?.split('\n')[0]?.substring(0, 25) || '')
       .filter(Boolean)
-      .slice(0, 5)
+
+    // Deduplicate titles using normalization
+    const seenTitles = new Set<string>()
+    const uniqueTitles: string[] = []
+    for (const title of allTitles) {
+      const normalized = title.toLowerCase().replace(/\s+/g, '').substring(0, 20)
+      if (!seenTitles.has(normalized)) {
+        seenTitles.add(normalized)
+        uniqueTitles.push(title)
+      }
+    }
+
+    const displayTitles = uniqueTitles.slice(0, 10)
 
     return isKorean
-      ? `🎵 ${requestedKey} 키 악보 ${results.length}개:\n${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
-      : `🎵 ${results.length} sheets in key ${requestedKey}:\n${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+      ? `🎵 ${requestedKey} 키 악보 ${uniqueTitles.length}곡:\n${displayTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+      : `🎵 ${uniqueTitles.length} songs in key ${requestedKey}:\n${displayTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
   }
 
   // Get song title from first result - prefer clean song_title
@@ -595,16 +663,21 @@ function groupResultsBySong(
     return bScore - aScore
   })
 
-  // Deduplicate: Keep only the BEST version of each song (by title)
+  // Deduplicate: Keep only the BEST version of each song (by normalized title)
   // This removes inferior versions (fewer pages) of the same song
+  // Uses aggressive normalization to catch variations like "거룩하신 어린양 E" vs "거룩하신 어린양"
   const bestByTitle = new Map<string, GroupedSongResult>()
   for (const group of grouped) {
-    const normalizedTitle = group.title.toLowerCase().trim()
+    // Use aggressive normalization for dedup comparison
+    const normalizedTitle = normalizeTitleForDedup(group.title)
+    console.log(`[Dedup] "${group.title}" -> normalized: "${normalizedTitle}"`)
+
     if (!bestByTitle.has(normalizedTitle)) {
       // First (best) version of this song - keep it
       bestByTitle.set(normalizedTitle, group)
+    } else {
+      console.log(`[Dedup] Skipping duplicate: "${group.title}" (matches "${bestByTitle.get(normalizedTitle)?.title}")`)
     }
-    // Skip inferior versions of the same song
   }
   grouped = Array.from(bestByTitle.values())
 
@@ -680,21 +753,31 @@ export async function POST(request: NextRequest) {
 
     // CASE 1: Key list query (e.g., "A 코드 찬양리스트")
     if (keyQuery.isKeyQuery && keyQuery.requestedKey) {
-      console.log(`[Key Query] Looking for songs in key: ${keyQuery.requestedKey}`)
+      const queryLimit = Math.max(20, (keyQuery.requestedCount || 5) * 3) // Fetch extra to account for grouping/filtering
+      console.log(`[Key Query] Looking for songs in key: ${keyQuery.requestedKey}, requested count: ${keyQuery.requestedCount || 'default'}, query limit: ${queryLimit}`)
 
       // Search for all songs with the requested key using song_key field
       const { data, error } = await supabase
         .from('song_images')
         .select('*')
         .ilike('song_key', `%${keyQuery.requestedKey}%`)
-        .limit(20)
+        .limit(queryLimit)
 
       if (!error && data) {
         // Filter to only include songs where key matches precisely
+        // Supports multiple keys stored as comma-separated (e.g., "D, B")
         searchResults = data.filter(r => {
-          const key = r.song_key?.toUpperCase() || ''
+          const keyField = r.song_key?.toUpperCase() || ''
           const requestedKeyUpper = keyQuery.requestedKey!.toUpperCase()
-          return key === requestedKeyUpper || key.startsWith(requestedKeyUpper)
+
+          // Split by comma to handle multiple keys (e.g., "D, B" matches both D and B)
+          const songKeys = keyField.split(/\s*,\s*/).map((k: string) => k.trim())
+
+          return songKeys.some((k: string) =>
+            k === requestedKeyUpper ||
+            k.startsWith(requestedKeyUpper) ||
+            k.includes(`/${requestedKeyUpper}`)  // Handle slash notation like "B/D#"
+          )
         })
         console.log(`[Key Query] Found ${searchResults.length} songs in key ${keyQuery.requestedKey}`)
       }
@@ -939,9 +1022,10 @@ export async function POST(request: NextRequest) {
     const groupedResults = groupResultsBySong(searchResults, requestedKey || undefined)
     console.log(`[Grouping] ${searchResults.length} raw results -> ${groupedResults.length} grouped songs`)
 
-    // Limit to MAX_SUGGESTIONS (could be 1-3)
-    const limitedGroups = groupedResults.slice(0, MAX_SUGGESTIONS)
-    console.log(`[Limiting] Showing ${limitedGroups.length} of ${groupedResults.length} songs (max: ${MAX_SUGGESTIONS})`)
+    // Limit results: use requested count if specified, otherwise MAX_SUGGESTIONS
+    const resultLimit = keyQuery.requestedCount || MAX_SUGGESTIONS
+    const limitedGroups = groupedResults.slice(0, resultLimit)
+    console.log(`[Limiting] Showing ${limitedGroups.length} of ${groupedResults.length} songs (limit: ${resultLimit}, requested: ${keyQuery.requestedCount || 'default'})`)
 
     // Check if we need to ask for key selection
     // If user is searching for a specific song without specifying key, and multiple keys exist

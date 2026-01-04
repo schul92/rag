@@ -33,6 +33,12 @@ export interface Translations {
   webResults: string
   selectKey: (title: string, keys: string) => string
   keyListResult: (key: string, count: number) => string
+  // Progressive loading messages
+  loadingPhase1: string
+  loadingPhase2: (query: string) => string
+  loadingPhase3: string
+  loadingPhase4: string
+  loadingPhase5: string
 }
 
 export const translations: Record<Language, Translations> = {
@@ -79,6 +85,13 @@ export const translations: Record<Language, Translations> = {
     selectKey: (title: string, keys: string) =>
       `'${title}' 악보를 찾았습니다!\n🎹 사용 가능한 키: ${keys}\n\n어떤 키로 보시겠어요?`,
     keyListResult: (key: string, count: number) => `🎵 ${key} 키 악보 ${count}개`,
+
+    // Progressive loading
+    loadingPhase1: '검색 준비 중...',
+    loadingPhase2: (query: string) => `'${query}' 찾는 중...`,
+    loadingPhase3: '악보 데이터베이스 검색 중...',
+    loadingPhase4: 'AI가 최적의 결과를 분석 중...',
+    loadingPhase5: '결과를 정리하는 중...',
   },
   en: {
     // Header
@@ -123,6 +136,13 @@ export const translations: Record<Language, Translations> = {
     selectKey: (title: string, keys: string) =>
       `Found '${title}'!\n🎹 Available keys: ${keys}\n\nWhich key would you like?`,
     keyListResult: (key: string, count: number) => `🎵 ${count} sheets in key ${key}`,
+
+    // Progressive loading
+    loadingPhase1: 'Preparing search...',
+    loadingPhase2: (query: string) => `Looking for '${query}'...`,
+    loadingPhase3: 'Searching sheet music database...',
+    loadingPhase4: 'AI analyzing best results...',
+    loadingPhase5: 'Organizing results...',
   },
 } as const
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, KeyboardEvent } from 'react'
+import { useState, KeyboardEvent, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Send } from 'lucide-react'
@@ -14,6 +14,7 @@ interface ChatInputProps {
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const { t } = useLanguage()
   const [message, setMessage] = useState('')
+  const isComposingRef = useRef(false)
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -23,6 +24,11 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Skip if IME is composing (important for Korean/Japanese/Chinese input)
+    if (e.nativeEvent.isComposing || isComposingRef.current) {
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
@@ -35,6 +41,8 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
+        onCompositionStart={() => { isComposingRef.current = true }}
+        onCompositionEnd={() => { isComposingRef.current = false }}
         placeholder={t.inputPlaceholder}
         className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm sm:text-base placeholder:text-muted-foreground h-10 sm:h-12"
         disabled={disabled}

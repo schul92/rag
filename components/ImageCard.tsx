@@ -207,11 +207,11 @@ export function ImageCard({
         setIsOpen(open)
         if (!open) setCurrentPageIndex(0) // Reset to first page when closing
       }}>
-        <DialogContent className="max-w-[95vw] sm:max-w-4xl h-[90vh] p-0 bg-black/95 border-none rounded-xl sm:rounded-2xl flex flex-col">
+        <DialogContent className="w-full max-w-[100vw] sm:max-w-4xl h-[100dvh] sm:h-[90vh] p-0 bg-black/95 border-none rounded-none sm:rounded-2xl flex flex-col" showCloseButton={false}>
           <DialogTitle className="sr-only">{title}</DialogTitle>
 
           {/* Header with title, key, and page indicator */}
-          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-white/10">
+          <div className="flex items-center justify-between p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-white/10">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               {/* Current key badge */}
               {songKey && (
@@ -310,7 +310,7 @@ export function ImageCard({
           )}
 
           {/* Action Buttons - Bottom */}
-          <div className="flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 border-t border-white/10 bg-black/50">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-white/10 bg-black/50">
             {hasMultiplePages ? (
               <>
                 <Button
