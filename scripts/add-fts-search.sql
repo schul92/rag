@@ -52,8 +52,6 @@ RETURNS TABLE (
   image_url TEXT,
   ocr_text TEXT,
   original_filename TEXT,
-  song_group_id UUID,
-  page_number INT,
   rank FLOAT
 )
 LANGUAGE sql STABLE
@@ -67,8 +65,6 @@ AS $$
     s.image_url,
     s.ocr_text,
     s.original_filename,
-    s.song_group_id,
-    s.page_number,
     ts_rank_cd(s.search_vector, plainto_tsquery('simple', query_text)) as rank
   FROM song_images s
   WHERE s.search_vector @@ plainto_tsquery('simple', query_text)

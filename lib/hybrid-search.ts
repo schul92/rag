@@ -20,8 +20,6 @@ export interface SearchResult {
   image_url: string
   ocr_text: string | null
   original_filename: string | null
-  song_group_id: string | null
-  page_number: number | null
 }
 
 export interface RankedResult extends SearchResult {
@@ -144,7 +142,7 @@ export async function searchExact(
 ): Promise<SearchResult[]> {
   const { data, error } = await supabase
     .from('song_images')
-    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename, song_group_id, page_number')
+    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename')
     .or(`song_title.ilike.%${query}%,song_title_korean.ilike.%${query}%,song_title_english.ilike.%${query}%`)
     .limit(limit)
 
@@ -194,7 +192,7 @@ export async function searchAliases(
     const songTitles = aliases.map(a => a.song_title)
     const { data: songs, error: songError } = await supabase
       .from('song_images')
-      .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename, song_group_id, page_number')
+      .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename')
       .in('song_title', songTitles)
       .limit(limit)
 
@@ -216,7 +214,7 @@ export async function searchNormalized(
   // Get songs with titles for client-side normalization
   const { data, error } = await supabase
     .from('song_images')
-    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename, song_group_id, page_number')
+    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename')
     .not('song_title', 'is', null)
     .limit(200)
 
@@ -249,7 +247,7 @@ export async function searchFuzzy(
   // Get all songs and filter by similarity
   const { data, error } = await supabase
     .from('song_images')
-    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename, song_group_id, page_number')
+    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename')
     .not('song_title', 'is', null)
     .limit(500)
 
@@ -298,7 +296,7 @@ export async function searchOCR(
 ): Promise<SearchResult[]> {
   const { data, error } = await supabase
     .from('song_images')
-    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename, song_group_id, page_number')
+    .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename')
     .ilike('ocr_text', `%${query}%`)
     .limit(limit)
 
