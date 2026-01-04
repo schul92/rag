@@ -1,36 +1,693 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PraiseFlow - Worship Song Chord Sheet Finder
 
-## Getting Started
+A bilingual (Korean/English) AI-powered search system for finding worship song chord sheets. Built with RAG (Retrieval-Augmented Generation) architecture using Claude Vision for metadata extraction and semantic search.
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-15-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green)
+![Claude](https://img.shields.io/badge/Claude-Sonnet-orange)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Table of Contents
+
+- [Overview](#overview)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [RAG Workflow](#rag-workflow)
+- [Database Schema](#database-schema)
+- [Search Algorithm](#search-algorithm)
+- [API Reference](#api-reference)
+- [Setup Guide](#setup-guide)
+- [Cost Analysis](#cost-analysis)
+- [Project Structure](#project-structure)
+
+---
+
+## Overview
+
+PraiseFlow helps worship teams find chord sheets by searching through a database of scanned/photographed sheet music. Users can search in Korean or English, and the system handles:
+
+- **Korean text variations**: "위대하신주" = "위대하신 주" = "위 대 하 신 주"
+- **Cross-language search**: "Holy Forever" finds "거룩 영원히"
+- **Typo tolerance**: "위대하신쥬" -> "위대하신주"
+- **Multi-page sheets**: Automatically groups pages together
+- **Key selection**: Filter by musical key (G, A, C, Dm, etc.)
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | Next.js 15 (App Router) | React framework with server components |
+| **UI** | shadcn/ui + Tailwind CSS | Component library and styling |
+| **Database** | Supabase (PostgreSQL) | Data storage with pgvector extension |
+| **Vector Search** | pgvector + Voyage AI | Semantic similarity search |
+| **AI Extraction** | Claude Vision API | Extract metadata from chord sheet images |
+| **AI Chat** | Claude Sonnet | Generate helpful responses when needed |
+| **Storage** | Supabase Storage | Image file hosting |
+| **Language** | TypeScript | Type-safe development |
+
+---
+
+## Architecture
+
+```
++---------------------------------------------------------------------+
+|                        PRAISEFLOW SYSTEM                            |
++---------------------------------------------------------------------+
+
++---------------------------------------------------------------------+
+|                    1. IMAGE INGESTION PIPELINE                      |
+|                       (One-time per image)                          |
++---------------------------------------------------------------------+
+|                                                                     |
+|   Local Images --> Claude Vision --> Voyage AI --> Supabase         |
+|   (JPG/PNG)        (Extract text)    (Embeddings)  (Store all)      |
+|                                                                     |
+|   Extracts:                                                         |
+|   - song_title (original language)                                  |
+|   - song_title_korean                                               |
+|   - song_title_english                                              |
+|   - song_key (G, A, Dm, etc.)                                       |
+|   - ocr_text (full page text)                                       |
+|   - 512-dim embedding vector                                        |
+|                                                                     |
++---------------------------------------------------------------------+
+
++---------------------------------------------------------------------+
+|                    2. SEARCH PIPELINE                               |
+|                     (Every user query)                              |
++---------------------------------------------------------------------+
+|                                                                     |
+|   User Query --> Normalize --> Parallel Search --> Score & Rank    |
+|   "Holy Forever"   (Korean)     (4 methods)        (Deduplicate)   |
+|                                                                     |
+|   Search Methods (run simultaneously):                              |
+|   +-----------+-----------+-----------+-----------+                 |
+|   |   EXACT   | NORMALIZED|   ALIAS   |  VECTOR   |                 |
+|   | Score:1.0 | Score:0.95| Score:0.95| Score:0.7 |                 |
+|   |           |           |           |           |                 |
+|   | Title     | Remove    | Korean <> | Semantic  |                 |
+|   | ILIKE     | spaces,   | English   | similarity|                 |
+|   | %query%   | match     | mapping   | (Voyage)  |                 |
+|   +-----------+-----------+-----------+-----------+                 |
+|                                                                     |
++---------------------------------------------------------------------+
+
++---------------------------------------------------------------------+
+|                    3. RESPONSE GENERATION                           |
++---------------------------------------------------------------------+
+|                                                                     |
+|   Results Found?                                                    |
+|        |                                                            |
+|   +----+----+                                                       |
+|   |         |                                                       |
+|  YES        NO                                                      |
+|   |         |                                                       |
+|   v         v                                                       |
+| Smart     Claude AI                                                 |
+| Response  Assistance                                                |
+| (FREE)    (~$0.003)                                                 |
+|                                                                     |
++---------------------------------------------------------------------+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## RAG Workflow
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### What is RAG?
 
-## Learn More
+**RAG (Retrieval-Augmented Generation)** combines search (retrieval) with AI generation. Instead of relying solely on an AI's training data, we:
 
-To learn more about Next.js, take a look at the following resources:
+1. **Retrieve** relevant documents from our database
+2. **Augment** the AI prompt with this context
+3. **Generate** a response based on actual data
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Our RAG Implementation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+#### Phase 1: Document Ingestion (One-time setup)
 
-## Deploy on Vercel
+```
++---------------------------------------------------------------+
+|  STEP 1: IMAGE UPLOAD                                         |
+|  Script: scripts/process-images.ts                            |
+|                                                               |
+|  - Read images from local folder                              |
+|  - Compute MD5 hash for duplicate detection                   |
+|  - Skip already-processed images                              |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 2: CLAUDE VISION EXTRACTION                             |
+|  API: Claude claude-sonnet-4-20250514 with Vision             |
+|  Cost: ~$0.008 per image                                      |
+|                                                               |
+|  Prompt: "Extract song metadata as JSON..."                   |
+|                                                               |
+|  Output:                                                      |
+|  {                                                            |
+|    "song_title": "Holy Forever",                              |
+|    "song_title_korean": "거룩 영원히",                        |
+|    "song_key": "D",                                           |
+|    "ocr_text": "Holy Forever\nCEC Worship\n..."               |
+|  }                                                            |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 3: EMBEDDING GENERATION                                 |
+|  API: Voyage AI (voyage-3-lite)                               |
+|  Cost: ~$0.00006 per embedding                                |
+|                                                               |
+|  Input: Combined text (title + korean + english + ocr_text)   |
+|  Output: 512-dimensional vector                               |
+|                                                               |
+|  This vector captures semantic meaning, enabling:             |
+|  - "worship song about God's glory" -> finds relevant songs   |
+|  - Matches even without exact keyword overlap                 |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 4: STORAGE                                              |
+|  Database: Supabase (PostgreSQL + pgvector)                   |
+|                                                               |
+|  - Upload image to Supabase Storage                           |
+|  - Insert metadata + embedding into song_images table         |
+|  - Create indexes for fast search                             |
++---------------------------------------------------------------+
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### Phase 2: Query Processing (Every search)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
++---------------------------------------------------------------+
+|  STEP 1: QUERY NORMALIZATION                                  |
+|                                                               |
+|  Input: "거룩 영원히 악보 찾아줘"                             |
+|                                                               |
+|  Process:                                                     |
+|  1. Remove filler words: 악보, 찾아줘, 코드, key, sheet...    |
+|  2. Result: "거룩 영원히"                                     |
+|  3. Normalize Korean: "거룩영원히" (NFC + remove spaces)      |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 2: PARALLEL SEARCH (All run simultaneously)             |
+|                                                               |
+|  +-------------------------------------------------------+   |
+|  | EXACT MATCH (Score: 1.0)                              |   |
+|  | SELECT * FROM song_images                             |   |
+|  | WHERE song_title ILIKE '%거룩 영원히%'                |   |
+|  +-------------------------------------------------------+   |
+|                                                               |
+|  +-------------------------------------------------------+   |
+|  | NORMALIZED MATCH (Score: 0.95)                        |   |
+|  | Compare: normalizeKorean(song_title) with query       |   |
+|  | Handles: "거룩영원히" = "거룩 영원히"                 |   |
+|  +-------------------------------------------------------+   |
+|                                                               |
+|  +-------------------------------------------------------+   |
+|  | ALIAS MATCH (Score: 0.95)                             |   |
+|  | SELECT * FROM song_aliases                            |   |
+|  | WHERE alias ILIKE '%Holy Forever%'                    |   |
+|  | -> Returns Korean song "거룩 영원히"                  |   |
+|  +-------------------------------------------------------+   |
+|                                                               |
+|  +-------------------------------------------------------+   |
+|  | FUZZY MATCH (Score: similarity x 0.8)                 |   |
+|  | Uses calculateSimilarity() for typo handling          |   |
+|  | "위대하신쥬" -> "위대하신주" (similarity: 0.85)       |   |
+|  +-------------------------------------------------------+   |
+|                                                               |
+|  +-------------------------------------------------------+   |
+|  | VECTOR SEARCH (Score: ~0.7) - Only if above return 0  |   |
+|  | 1. Generate embedding for query via Voyage AI         |   |
+|  | 2. SELECT * FROM song_images                          |   |
+|  |    ORDER BY embedding <=> query_embedding             |   |
+|  | 3. Return semantically similar songs                  |   |
+|  +-------------------------------------------------------+   |
+|                                                               |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 3: SCORE AGGREGATION                                    |
+|                                                               |
+|  - Merge results from all search methods                      |
+|  - Keep highest score per song (deduplicate)                  |
+|  - Sort by score descending                                   |
+|  - Group multi-page sheets together                           |
+|  - Limit to top 3 results                                     |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 4: RESPONSE GENERATION                                  |
+|                                                               |
+|  IF results.length > 0:                                       |
+|    -> Generate smart response (FREE, no API call)             |
+|    -> "'Holy Forever' (D키) 악보입니다."                      |
+|                                                               |
+|  ELSE:                                                        |
+|    -> Call Claude Sonnet API (~$0.003)                        |
+|    -> "검색 결과가 없습니다. 다른 키워드로 시도해 보세요."    |
++---------------------------------------------------------------+
+```
+
+---
+
+## Database Schema
+
+### Tables
+
+#### `song_images` - Main song data
+
+```sql
+CREATE TABLE song_images (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Image data
+  image_url TEXT NOT NULL,           -- Supabase Storage URL
+  original_filename TEXT,            -- Original file name
+
+  -- Extracted metadata (from Claude Vision)
+  song_title TEXT,                   -- Main title
+  song_title_korean TEXT,            -- Korean translation
+  song_title_english TEXT,           -- English translation
+  song_key TEXT,                     -- Musical key (G, A, Dm, etc.)
+  artist TEXT,                       -- Composer/songwriter
+  ocr_text TEXT,                     -- Full extracted text
+  lyrics_excerpt TEXT,               -- First few lines
+
+  -- Vector embedding (from Voyage AI)
+  embedding VECTOR(1024),            -- Semantic search vector
+
+  -- Grouping
+  song_group_id UUID,                -- Groups multi-page sheets
+  page_number INT,                   -- Page order
+
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for fast search
+CREATE INDEX idx_song_title ON song_images(song_title);
+CREATE INDEX idx_song_key ON song_images(song_key);
+CREATE INDEX idx_embedding ON song_images
+  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+#### `song_aliases` - Cross-language mappings
+
+```sql
+CREATE TABLE song_aliases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  song_title TEXT NOT NULL,          -- Canonical title in song_images
+  alias TEXT NOT NULL,               -- Alternative name
+  language VARCHAR(10),              -- 'ko', 'en', 'romanized'
+  alias_type VARCHAR(20),            -- 'official', 'common', 'translation'
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(song_title, alias)
+);
+
+-- Example data
+INSERT INTO song_aliases (song_title, alias, language, alias_type) VALUES
+('Holy Forever', '거룩 영원히', 'ko', 'translation'),
+('Holy Forever', '홀리 포에버', 'ko', 'romanized'),
+('위대하신 주', 'How Great Is Our God', 'en', 'translation');
+```
+
+### Database Functions
+
+#### Vector similarity search
+
+```sql
+CREATE FUNCTION search_songs_by_embedding(
+  query_embedding VECTOR(1024),
+  match_threshold FLOAT DEFAULT 0.5,
+  match_count INT DEFAULT 5
+)
+RETURNS TABLE (
+  id UUID,
+  song_title TEXT,
+  image_url TEXT,
+  similarity FLOAT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    s.id,
+    s.song_title,
+    s.image_url,
+    1 - (s.embedding <=> query_embedding) as similarity
+  FROM song_images s
+  WHERE 1 - (s.embedding <=> query_embedding) > match_threshold
+  ORDER BY s.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+```
+
+---
+
+## Search Algorithm
+
+### Scoring Model
+
+| Method | Score | When Used | Example |
+|--------|-------|-----------|---------|
+| **Exact Title** | 1.0 | Direct title match | "Holy Forever" -> Holy Forever |
+| **Normalized Korean** | 0.95 | After removing spaces | "거룩영원히" = "거룩 영원히" |
+| **Alias Match** | 0.95 | Cross-language lookup | "Holy Forever" -> 거룩 영원히 |
+| **Fuzzy Title** | sim x 0.8 | Typo tolerance | "위대하신쥬" -> 위대하신주 |
+| **Vector Search** | ~0.7 | Semantic meaning | "glory song" -> related songs |
+| **OCR Fallback** | 0.75 | Text in image | Finds mentions in lyrics |
+
+### Korean Normalization
+
+```typescript
+function normalizeKorean(text: string): string {
+  return text
+    .normalize('NFC')      // Unicode normalization
+    .replace(/\s+/g, '')   // Remove ALL spaces
+    .toLowerCase()         // Case insensitive
+}
+
+// Examples:
+// "거룩 영원히" -> "거룩영원히"
+// "위 대 하 신 주" -> "위대하신주"
+// "Holy Forever" -> "holyforever"
+```
+
+### Multi-page Sheet Grouping
+
+```typescript
+// Group sheets by filename pattern + song title
+function getBaseFilename(filename: string): string {
+  // "Holy_Forever_1.jpg" -> "holy_forever"
+  // "Holy_Forever_2.jpg" -> "holy_forever"
+  // Both group together as multi-page sheet
+}
+
+// Only group if:
+// 1. Same base filename pattern
+// 2. Same song_title (prevents mixing different songs)
+```
+
+---
+
+## API Reference
+
+### POST `/api/chat`
+
+Main search endpoint.
+
+**Request:**
+```typescript
+{
+  message: string      // User's search query
+  language?: 'ko'|'en' // UI language (auto-detect if not provided)
+  history?: Array<{    // Conversation context (last 3 messages)
+    role: 'user' | 'assistant'
+    content: string
+  }>
+}
+```
+
+**Response:**
+```typescript
+{
+  message: string           // Assistant's response text
+  images: Array<{
+    id: string
+    url: string             // Image URL
+    filename: string
+    ocrText: string         // Extracted text
+    songKey: string         // Musical key
+    score: number           // Match confidence (0-1)
+    matchType: 'exact' | 'normalized' | 'alias' | 'fuzzy' | 'vector'
+    matchedOn: string       // What text matched
+    relatedPages: Array<{   // Other pages of same sheet
+      id: string
+      url: string
+      filename: string
+      songKey: string
+    }>
+    totalPages: number
+    availableKeys: string[] // All available keys for this song
+  }>
+  needsKeySelection: boolean
+  availableKeys: string[]
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Holy Forever", "language": "en"}'
+```
+
+---
+
+## Setup Guide
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm (recommended) or npm
+- Supabase account
+- Anthropic API key (Claude)
+- Voyage AI API key
+
+### 1. Clone and Install
+
+```bash
+git clone https://github.com/schul92/rag.git
+cd rag
+pnpm install
+```
+
+### 2. Environment Variables
+
+Create `.env.local`:
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Anthropic (Claude)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Voyage AI (Embeddings)
+VOYAGE_API_KEY=pa-...
+```
+
+### 3. Database Setup
+
+Run in Supabase SQL Editor:
+
+```sql
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Run the setup scripts
+-- 1. scripts/supabase-setup.sql (creates tables)
+-- 2. scripts/add-metadata-columns.sql (adds Claude Vision columns)
+-- 3. scripts/add-aliases-table.sql (cross-language search)
+```
+
+### 4. Process Images
+
+Place chord sheet images in a folder, then:
+
+```bash
+# Edit the source path in scripts/process-images.ts
+# Then run:
+pnpm tsx scripts/process-images.ts
+```
+
+This will:
+1. Extract metadata using Claude Vision
+2. Generate embeddings via Voyage AI
+3. Upload images to Supabase Storage
+4. Insert records into database
+
+### 5. Run Development Server
+
+```bash
+pnpm dev
+```
+
+Open http://localhost:3000
+
+---
+
+## Cost Analysis
+
+### One-time Extraction Costs
+
+| API | Per Image | 100 Images | 1000 Images |
+|-----|-----------|------------|-------------|
+| Claude Vision | $0.008 | $0.80 | $8.00 |
+| Voyage AI Embedding | $0.00006 | $0.006 | $0.06 |
+| **Total** | **$0.008** | **$0.81** | **$8.06** |
+
+### Runtime Search Costs
+
+| Scenario | Cost | Frequency |
+|----------|------|-----------|
+| Database search (keyword match) | $0 | 95% of queries |
+| Voyage AI (vector search fallback) | $0.00006 | 4% of queries |
+| Claude Chat (no results / help) | $0.003 | 1% of queries |
+
+**Average cost per search: ~$0.0001** (essentially free)
+
+---
+
+## Project Structure
+
+```
+rag/
+├── app/
+│   ├── api/
+│   │   ├── chat/
+│   │   │   └── route.ts        # Main search API
+│   │   └── search/
+│   │       └── route.ts        # Alternative search endpoint
+│   ├── globals.css             # Tailwind styles
+│   ├── layout.tsx              # Root layout with providers
+│   └── page.tsx                # Main chat interface
+│
+├── components/
+│   ├── ui/                     # shadcn/ui components
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── dialog.tsx
+│   │   └── ...
+│   ├── ChatInput.tsx           # Search input component
+│   ├── ImageCard.tsx           # Song sheet card with dialog
+│   ├── LanguageProvider.tsx    # i18n context
+│   └── ThemeProvider.tsx       # Dark/light theme
+│
+├── lib/
+│   ├── claude.ts               # Claude API utilities
+│   ├── embeddings.ts           # Voyage AI integration
+│   ├── i18n.ts                 # Translations (ko/en)
+│   ├── supabase.ts             # Supabase client
+│   └── utils.ts                # Helper functions
+│
+├── scripts/
+│   ├── process-images.ts       # Full ingestion pipeline
+│   ├── extract-metadata-vision.ts  # Claude Vision extraction
+│   ├── supabase-setup.sql      # Database schema
+│   ├── add-aliases-table.sql   # Cross-language aliases
+│   └── ...
+│
+├── .env.local                  # Environment variables (git-ignored)
+├── .env.example                # Example env template
+└── README.md                   # This file
+```
+
+---
+
+## Key Files Explained
+
+### `app/api/chat/route.ts`
+The heart of the search system. Contains:
+- Query normalization (Korean handling)
+- Parallel search execution
+- Score aggregation and deduplication
+- Multi-page sheet grouping
+- Response generation
+
+### `scripts/process-images.ts`
+Image ingestion pipeline:
+- Reads local images
+- Calls Claude Vision for metadata
+- Generates Voyage AI embeddings
+- Uploads to Supabase
+
+### `lib/i18n.ts`
+Bilingual support:
+- All UI strings in Korean and English
+- Dynamic message generation
+
+### `components/ImageCard.tsx`
+Song sheet display:
+- Thumbnail with key badge
+- Full-screen dialog viewer
+- Multi-page navigation
+- Download functionality
+
+---
+
+## Development Tips
+
+### Adding New Songs
+
+1. Place images in your source folder
+2. Run `pnpm tsx scripts/process-images.ts`
+3. Images are processed with 25s delay (API rate limits)
+
+### Adding Song Aliases
+
+```sql
+INSERT INTO song_aliases (song_title, alias, language, alias_type)
+VALUES ('Your Song Title', 'Alternative Name', 'en', 'common');
+```
+
+### Debugging Search
+
+The API returns debug info:
+```typescript
+_debug: {
+  usedClaude: boolean,      // Was Claude API called?
+  rawResultCount: number,   // Before grouping
+  groupedCount: number,     // After grouping
+  shownCount: number,       // Final results
+  needsHelp: boolean        // User needs assistance?
+}
+```
+
+### Adjusting Search Sensitivity
+
+In `app/api/chat/route.ts`:
+```typescript
+const SIMILARITY_THRESHOLD = 0.82      // Strict matching
+const SIMILARITY_THRESHOLD_LOW = 0.70  // Vector search fallback
+const MAX_SUGGESTIONS = 3              // Results to show
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `pnpm build` to verify
+5. Submit a pull request
+
+---
+
+## License
+
+MIT License - See LICENSE file for details.
+
+---
+
+## Acknowledgments
+
+- Built with [Claude Code](https://claude.ai/claude-code)
+- UI components from [shadcn/ui](https://ui.shadcn.com)
+- Vector search powered by [Voyage AI](https://www.voyageai.com)
+- Database hosted on [Supabase](https://supabase.com)
