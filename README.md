@@ -75,22 +75,38 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 +---------------------------------------------------------------------+
 
 +---------------------------------------------------------------------+
-|                    2. SEARCH PIPELINE                               |
+|                    2. HYBRID SEARCH PIPELINE                        |
 |                     (Every user query)                              |
 +---------------------------------------------------------------------+
 |                                                                     |
-|   User Query --> Normalize --> Parallel Search --> Score & Rank    |
-|   "Holy Forever"   (Korean)     (4 methods)        (Deduplicate)   |
+|   User Query --> Preprocess --> 7 PARALLEL SEARCHES --> RRF Fusion |
+|   "Holy Forever"                                                    |
 |                                                                     |
-|   Search Methods (run simultaneously):                              |
-|   +-----------+-----------+-----------+-----------+                 |
-|   |   EXACT   | NORMALIZED|   ALIAS   |  VECTOR   |                 |
-|   | Score:1.0 | Score:0.95| Score:0.95| Score:0.7 |                 |
-|   |           |           |           |           |                 |
-|   | Title     | Remove    | Korean <> | Semantic  |                 |
-|   | ILIKE     | spaces,   | English   | similarity|                 |
-|   | %query%   | match     | mapping   | (Voyage)  |                 |
-|   +-----------+-----------+-----------+-----------+                 |
+|   ┌─────────────────────────────────────────────────────────────┐   |
+|   │           ALL 7 METHODS RUN IN PARALLEL                     │   |
+|   │                  (using Promise.all)                        │   |
+|   │                                                             │   |
+|   │  ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐        │   |
+|   │  │ EXACT │ │ BM25  │ │NORMAL │ │ ALIAS │ │ FUZZY │        │   |
+|   │  │ ILIKE │ │  FTS  │ │KOREAN │ │LOOKUP │ │LEVEN- │        │   |
+|   │  │       │ │       │ │       │ │       │ │SHTEIN │        │   |
+|   │  └───┬───┘ └───┬───┘ └───┬───┘ └───┬───┘ └───┬───┘        │   |
+|   │      │         │         │         │         │             │   |
+|   │  ┌───┴───┐ ┌───┴───┐                                       │   |
+|   │  │VECTOR │ │  OCR  │                                       │   |
+|   │  │VOYAGE │ │ TEXT  │                                       │   |
+|   │  └───┬───┘ └───┬───┘                                       │   |
+|   │      │         │                                           │   |
+|   └──────┼─────────┼───────────────────────────────────────────┘   |
+|          │         │                                               |
+|          ▼         ▼                                               |
+|   ┌─────────────────────────────────────────────────────────────┐   |
+|   │         RECIPROCAL RANK FUSION (RRF)                        │   |
+|   │                                                             │   |
+|   │   Formula: RRF(d) = Σ 1/(k + rank(d))  where k = 60        │   |
+|   │                                                             │   |
+|   │   Documents found by MULTIPLE methods get BOOSTED!          │   |
+|   └─────────────────────────────────────────────────────────────┘   |
 |                                                                     |
 +---------------------------------------------------------------------+
 
@@ -358,16 +374,53 @@ $$;
 
 ## Search Algorithm
 
-### Scoring Model
+### The 7 Parallel Search Methods
 
-| Method | Score | When Used | Example |
-|--------|-------|-----------|---------|
-| **Exact Title** | 1.0 | Direct title match | "Holy Forever" -> Holy Forever |
-| **Normalized Korean** | 0.95 | After removing spaces | "거룩영원히" = "거룩 영원히" |
-| **Alias Match** | 0.95 | Cross-language lookup | "Holy Forever" -> 거룩 영원히 |
-| **Fuzzy Title** | sim x 0.8 | Typo tolerance | "위대하신쥬" -> 위대하신주 |
-| **Vector Search** | ~0.7 | Semantic meaning | "glory song" -> related songs |
-| **OCR Fallback** | 0.75 | Text in image | Finds mentions in lyrics |
+| # | Method | Description | Example |
+|---|--------|-------------|---------|
+| 1 | **Exact (ILIKE)** | SQL substring match on titles | "Holy" → "**Holy** Forever" |
+| 2 | **BM25 (FTS)** | PostgreSQL full-text search with relevance ranking | "forever holy" → ranked results |
+| 3 | **Normalized Korean** | Match after removing spaces, NFC normalization | "위대하신주" = "위대하신 주" |
+| 4 | **Alias Lookup** | Cross-language mapping table | "Holy Forever" → "거룩 영원히" |
+| 5 | **Fuzzy (Levenshtein)** | Handles typos using edit distance | "위대하신쥬" → "위대하신주" |
+| 6 | **Vector (Semantic)** | Voyage AI embeddings for meaning | "praise about glory" → related |
+| 7 | **OCR Text** | Search in extracted image text | Find by lyrics content |
+
+### Reciprocal Rank Fusion (RRF)
+
+**Why not use raw scores?**
+```
+Vector score: 0.85   (cosine similarity 0-1)
+BM25 score:   12.4   (relevance score 0-∞)
+Fuzzy score:  0.72   (Levenshtein ratio 0-1)
+
+These are NOT comparable! Different scales.
+```
+
+**RRF Solution: Use RANK position instead**
+```
+Formula: RRF(d) = Σ 1/(k + rank(d))  where k = 60
+
+Example for "Holy Forever" found by 3 methods:
+- Exact search:  rank 1 → 1/(60+1) = 0.0164
+- BM25 search:   rank 2 → 1/(60+2) = 0.0161
+- Vector search: rank 5 → 1/(60+5) = 0.0154
+────────────────────────────────────────────
+  Combined RRF score:      = 0.0479
+
+Documents found by MULTIPLE methods get naturally boosted!
+```
+
+### Old vs New Scoring (Deprecated)
+
+| Method | Old Score | New (RRF) |
+|--------|-----------|-----------|
+| Exact Title | 1.0 | By rank position |
+| Normalized | 0.95 | By rank position |
+| Alias Match | 0.95 | By rank position |
+| Fuzzy | sim × 0.8 | By rank position |
+| Vector | ~0.7 | By rank position |
+| OCR | 0.75 | By rank position |
 
 ### Korean Normalization
 
@@ -579,6 +632,8 @@ rag/
 │   └── ThemeProvider.tsx       # Dark/light theme
 │
 ├── lib/
+│   ├── hybrid-search.ts        # 7 parallel search methods + RRF
+│   ├── reranker.ts             # Cross-encoder reranking (Cohere/BGE)
 │   ├── claude.ts               # Claude API utilities
 │   ├── embeddings.ts           # Voyage AI integration
 │   ├── i18n.ts                 # Translations (ko/en)
@@ -588,6 +643,8 @@ rag/
 ├── scripts/
 │   ├── process-images.ts       # Full ingestion pipeline
 │   ├── extract-metadata-vision.ts  # Claude Vision extraction
+│   ├── add-fts-search.sql      # BM25 full-text search migration
+│   ├── run-fts-migration.ts    # Verify FTS setup
 │   ├── supabase-setup.sql      # Database schema
 │   ├── add-aliases-table.sql   # Cross-language aliases
 │   └── ...
@@ -658,13 +715,90 @@ _debug: {
 }
 ```
 
-### Adjusting Search Sensitivity
+### Adjusting Search Configuration
 
 In `app/api/chat/route.ts`:
 ```typescript
-const SIMILARITY_THRESHOLD = 0.82      // Strict matching
-const SIMILARITY_THRESHOLD_LOW = 0.70  // Vector search fallback
-const MAX_SUGGESTIONS = 3              // Results to show
+// Feature flags
+const USE_HYBRID_SEARCH = true   // Enable 7-method parallel + RRF
+const USE_RERANKING = true       // Enable cross-encoder reranking
+const RERANK_TOP_N = 10          // Candidates to rerank
+
+// Thresholds
+const SIMILARITY_THRESHOLD_LOW = 0.50  // Vector search threshold
+const MAX_SUGGESTIONS = 2              // Max results to show
+```
+
+### Adding BM25 Full-Text Search
+
+Run in Supabase SQL Editor:
+```sql
+-- See scripts/add-fts-search.sql for full migration
+ALTER TABLE song_images ADD COLUMN search_vector tsvector;
+CREATE INDEX idx_song_fts ON song_images USING gin(search_vector);
+```
+
+---
+
+## Bug Fixes & Learnings
+
+### Bug 1: Empty String Match (JavaScript Gotcha)
+
+**Problem:** All songs with `null` Korean title matched EVERY query!
+
+```javascript
+// In JavaScript:
+"anyQuery".includes('')  // Always returns TRUE!
+
+// Our buggy code:
+const koreanNorm = normalizeKorean(song.song_title_korean || '')  // '' if null
+return query.includes(koreanNorm)  // "query".includes('') = true!
+```
+
+**Fix:** Check string length before `includes()`:
+```typescript
+const titleInQuery = (koreanNorm.length > 0 && query.includes(koreanNorm))
+```
+
+### Bug 2: Key Detection False Positive
+
+**Problem:** "only king" was detected as a key query with key "IN"!
+
+```
+Query: "only king"
+
+Regex: /(in\s*)([A-G])/i
+Match: "k-IN-g" → captures "in" + "g"
+
+Result: key = match[1] = "IN" (uppercase of "in")
+        System searched for songs in key "IN" instead of title "Only King"
+```
+
+**Fix:** Add word boundaries and explicit key group selection:
+```typescript
+// Before (buggy):
+/(in\s*)([A-Ga-g][#b]?m?)/i
+const key = match[1] || match[2]  // Takes "in" not "g"!
+
+// After (fixed):
+/\bkey\s+of\s+([A-Ga-g][#b]?m?)\b/i  // Require "key of"
+{ pattern: /.../, keyGroup: 1 }       // Explicit group
+```
+
+### Bug 3: Vector Search Empty Embedding Error
+
+**Problem:** When Voyage API rate-limited, empty embedding `[]` caused Supabase error.
+
+```
+Error: vector must have at least 1 dimension
+```
+
+**Fix:** Guard against empty embeddings:
+```typescript
+if (!queryEmbedding || queryEmbedding.length === 0) {
+  console.log('[Vector Search] Skipped - no embedding')
+  return []
+}
 ```
 
 ---
