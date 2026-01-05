@@ -316,17 +316,97 @@ export async function searchOCR(
   return (data || []) as SearchResult[]
 }
 
+// 8. Vector search with voyage-multilingual-2 (Korean-optimized)
+export async function searchVectorMultilingual(
+  supabase: SupabaseClient,
+  queryEmbedding: number[],
+  threshold: number = 0.5,
+  limit: number = 20
+): Promise<SearchResult[]> {
+  if (!queryEmbedding || queryEmbedding.length === 0) {
+    console.log('[Vector Multilingual] Skipped - no embedding provided')
+    return []
+  }
+
+  const { data, error } = await supabase
+    .rpc('search_songs_by_embedding_multilingual', {
+      query_embedding: queryEmbedding,
+      match_threshold: threshold,
+      match_count: limit
+    })
+
+  if (error) {
+    console.warn('[Vector Multilingual] Not available:', error.message)
+    return []
+  }
+
+  return (data || []) as SearchResult[]
+}
+
+// 9. Lyrics chunk search (finds songs by partial lyrics)
+export async function searchLyricsChunks(
+  supabase: SupabaseClient,
+  queryEmbedding: number[],
+  threshold: number = 0.6,
+  limit: number = 10
+): Promise<SearchResult[]> {
+  if (!queryEmbedding || queryEmbedding.length === 0) {
+    return []
+  }
+
+  try {
+    // First find matching chunks
+    const { data: chunks, error: chunkError } = await supabase
+      .rpc('search_lyrics_chunks', {
+        query_embedding: queryEmbedding,
+        match_threshold: threshold,
+        match_count: limit * 2
+      })
+
+    if (chunkError || !chunks?.length) return []
+
+    // Get unique song IDs from chunks
+    const songIds = [...new Set(chunks.map((c: { song_image_id: string }) => c.song_image_id))]
+
+    // Fetch the actual songs
+    const { data: songs, error: songError } = await supabase
+      .from('song_images')
+      .select('id, song_title, song_title_korean, song_title_english, song_key, image_url, ocr_text, original_filename')
+      .in('id', songIds)
+      .limit(limit)
+
+    if (songError) return []
+
+    return (songs || []) as SearchResult[]
+  } catch {
+    return []
+  }
+}
+
 /**
- * Main Hybrid Search Function
+ * Main Hybrid Search Function - 9-Way Search with RRF
  *
  * Executes all search methods in PARALLEL and combines results using RRF.
  * This is the core improvement over the previous cascade approach.
+ *
+ * Search Methods:
+ * 1. Exact Match (ILIKE)
+ * 2. BM25 Full-Text Search
+ * 3. Normalized Korean
+ * 4. Alias Lookup
+ * 5. Fuzzy (Levenshtein)
+ * 6. Vector (voyage-3-lite or voyage-3-large)
+ * 7. Vector Multilingual (voyage-multilingual-2) - Korean optimized
+ * 8. OCR Text Search
+ * 9. Lyrics Chunk Search - finds songs by partial lyrics
  *
  * Benefits:
  * - Vector search always runs (catches semantic matches)
  * - BM25 provides proper keyword relevance ranking
  * - RRF combines all results fairly by rank position
  * - Results found by multiple methods get boosted
+ * - Multilingual embedding improves Korean ↔ English cross-search
+ * - Lyrics chunks enable partial lyrics matching
  */
 export async function hybridSearch(
   supabase: SupabaseClient,
@@ -342,6 +422,8 @@ export async function hybridSearch(
     ocrLimit?: number
     fuzzyThreshold?: number
     vectorThreshold?: number
+    multilingualEmbedding?: number[]  // voyage-multilingual-2 embedding
+    lyricsChunkLimit?: number
   } = {}
 ): Promise<RankedResult[]> {
   const {
@@ -353,23 +435,37 @@ export async function hybridSearch(
     vectorLimit = 20,
     ocrLimit = 10,
     fuzzyThreshold = 0.6,
-    vectorThreshold = 0.5
+    vectorThreshold = 0.5,
+    multilingualEmbedding = [],
+    lyricsChunkLimit = 10
   } = options
 
-  console.log(`[Hybrid Search] Query: "${query}"`)
+  console.log(`[Hybrid Search] Query: "${query}" (8-way search + multilingual)`)
+
+  // Use multilingual embedding for all vector searches (voyage-multilingual-2, 1024d)
+  const embedding = multilingualEmbedding.length > 0 ? multilingualEmbedding : queryEmbedding
 
   // Execute ALL search methods in parallel
   const startTime = Date.now()
-  const [exactResults, bm25Results, normalizedResults, aliasResults, fuzzyResults, vectorResults, ocrResults] =
-    await Promise.all([
-      searchExact(supabase, query, exactLimit),
-      searchBM25(supabase, query, bm25Limit),
-      searchNormalized(supabase, query, normalizedLimit),
-      searchAliases(supabase, query, aliasLimit),
-      searchFuzzy(supabase, query, fuzzyThreshold, fuzzyLimit),
-      searchVector(supabase, queryEmbedding, vectorThreshold, vectorLimit),
-      searchOCR(supabase, query, ocrLimit)
-    ])
+  const [
+    exactResults,
+    bm25Results,
+    normalizedResults,
+    aliasResults,
+    fuzzyResults,
+    vectorResults,
+    ocrResults,
+    lyricsResults
+  ] = await Promise.all([
+    searchExact(supabase, query, exactLimit),
+    searchBM25(supabase, query, bm25Limit),
+    searchNormalized(supabase, query, normalizedLimit),
+    searchAliases(supabase, query, aliasLimit),
+    searchFuzzy(supabase, query, fuzzyThreshold, fuzzyLimit),
+    searchVectorMultilingual(supabase, embedding, vectorThreshold, vectorLimit),
+    searchOCR(supabase, query, ocrLimit),
+    searchLyricsChunks(supabase, embedding, 0.6, lyricsChunkLimit)
+  ])
   const elapsed = Date.now() - startTime
 
   console.log(`[Hybrid Search] Completed in ${elapsed}ms:`)
@@ -378,8 +474,9 @@ export async function hybridSearch(
   console.log(`  - Normalized: ${normalizedResults.length}`)
   console.log(`  - Alias: ${aliasResults.length}`)
   console.log(`  - Fuzzy: ${fuzzyResults.length}`)
-  console.log(`  - Vector: ${vectorResults.length}`)
+  console.log(`  - Vector (multilingual): ${vectorResults.length}`)
   console.log(`  - OCR: ${ocrResults.length}`)
+  console.log(`  - Lyrics Chunks: ${lyricsResults.length}`)
 
   // Combine all results using Reciprocal Rank Fusion
   const searchResultsMap = new Map<string, SearchResult[]>([
@@ -389,7 +486,8 @@ export async function hybridSearch(
     ['alias', aliasResults],
     ['fuzzy', fuzzyResults],
     ['vector', vectorResults],
-    ['ocr', ocrResults]
+    ['ocr', ocrResults],
+    ['lyrics', lyricsResults]
   ])
 
   const fusedResults = reciprocalRankFusion(searchResultsMap)

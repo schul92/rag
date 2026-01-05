@@ -10,9 +10,17 @@ export default defineConfig({
   timeout: 60000,
 
   use: {
-    baseURL: process.env.BASE_URL || 'https://onnuri-praise.vercel.app',
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+  },
+
+  // Auto-start dev server (requires .env.local to be configured)
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000,
   },
 
   projects: [

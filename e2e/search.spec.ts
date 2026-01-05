@@ -26,7 +26,7 @@ test.describe('Initial Page Load', () => {
     await expect(page.getByText('찬양팀 악보')).toBeVisible()
 
     // Search input should be visible
-    await expect(page.getByPlaceholder('곡 제목을 입력하세요')).toBeVisible()
+    await expect(page.getByPlaceholder('곡 제목을 입력하세요...')).toBeVisible()
 
     // Quick search buttons should be visible
     await expect(page.getByRole('button', { name: /오 베들레헴/ })).toBeVisible()
@@ -50,7 +50,7 @@ test.describe('Korean Song Title Search', () => {
     await page.goto('/')
 
     // Type in search input
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('베들레헴')
     await searchInput.press('Enter')
 
@@ -58,13 +58,13 @@ test.describe('Korean Song Title Search', () => {
     await page.waitForSelector('[class*="animate-spin"]', { state: 'detached', timeout: 30000 })
 
     // Should show results
-    await expect(page.locator('text=악보')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('[class*="bg-card"]').first()).toBeVisible({ timeout: 30000 })
   })
 
   test('should search for "거룩하신 어린양" and get results', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('거룩하신 어린양')
     await searchInput.press('Enter')
 
@@ -80,7 +80,7 @@ test.describe('Key-based Search', () => {
   test('should search "D키 악보 3개" and return exactly 3 unique songs', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('D키 악보 3개')
     await searchInput.press('Enter')
 
@@ -95,7 +95,7 @@ test.describe('Key-based Search', () => {
   test('should search "G키 찬양 5개" and return up to 5 unique songs', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('G키 찬양 5개')
     await searchInput.press('Enter')
 
@@ -111,7 +111,7 @@ test.describe('Multi-Key Song Search', () => {
   test('should find "저 들 밖에 한밤중에" when searching D키', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('D키 악보')
     await searchInput.press('Enter')
 
@@ -126,7 +126,7 @@ test.describe('Multi-Key Song Search', () => {
   test('should find "저 들 밖에 한밤중에" when searching B키', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('B키 악보')
     await searchInput.press('Enter')
 
@@ -143,7 +143,7 @@ test.describe('Song Deduplication', () => {
   test('Holy Forever with multiple pages should show as 1 song with page count', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('Holy Forever')
     await searchInput.press('Enter')
 
@@ -167,7 +167,7 @@ test.describe('Song Deduplication', () => {
   test('should not show duplicate songs in key search results', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('D키 악보 5개')
     await searchInput.press('Enter')
 
@@ -198,7 +198,7 @@ test.describe('Quick Search Buttons', () => {
     await page.waitForSelector('[class*="animate-spin"]', { state: 'detached', timeout: 30000 })
 
     // Should show results
-    await expect(page.locator('text=악보')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('[class*="bg-card"]').first()).toBeVisible({ timeout: 30000 })
   })
 
   test('should trigger key search when clicking key-based quick search', async ({ page }) => {
@@ -219,7 +219,7 @@ test.describe('Korean IME Input', () => {
   test('should handle Korean IME input correctly without sending partial characters', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
 
     // Type Korean text character by character (simulating IME)
     await searchInput.type('베들레헴', { delay: 100 })
@@ -242,7 +242,7 @@ test.describe('Song Modal', () => {
     await page.goto('/')
 
     // First search for a song
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('Holy Forever')
     await searchInput.press('Enter')
 
@@ -262,7 +262,7 @@ test.describe('Loading States', () => {
   test('should show progressive loading messages', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('테스트 검색')
     await searchInput.press('Enter')
 
@@ -276,7 +276,7 @@ test.describe('Loading States', () => {
   test('should show user message immediately before loading', async ({ page }) => {
     await page.goto('/')
 
-    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요')
+    const searchInput = page.getByPlaceholder('곡 제목을 입력하세요...')
     await searchInput.fill('테스트')
 
     // Press enter and immediately check for user message

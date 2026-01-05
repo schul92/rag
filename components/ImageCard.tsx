@@ -9,7 +9,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Music, X, Globe, Download, Share2, Check, ChevronLeft, ChevronRight, FileStack, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
-import { isCarouselDragging } from '@/lib/carousel-state'
 
 interface RelatedPage {
   id: string
@@ -181,13 +180,9 @@ export function ImageCard({
     transformRef.current?.resetTransform()
   }
 
-  // Simple click handler that checks global carousel drag state
-  // The carousel tracks drag state via embla API events
+  // Simple click handler - Keen Slider handles drag vs click automatically
+  // via the data-keen-slider-clickable attribute on the parent slide
   const handleClick = () => {
-    // Don't open if carousel is currently dragging or just finished dragging
-    if (isCarouselDragging()) {
-      return
-    }
     setIsOpen(true)
   }
 

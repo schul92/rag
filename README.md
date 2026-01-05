@@ -1,11 +1,12 @@
 # PraiseFlow - Worship Song Chord Sheet Finder
 
-A bilingual (Korean/English) AI-powered search system for finding worship song chord sheets. Built with RAG (Retrieval-Augmented Generation) architecture using Claude Vision for metadata extraction and semantic search.
+A bilingual (Korean/English) AI-powered search system for finding worship song chord sheets. Built with RAG (Retrieval-Augmented Generation) architecture using **Gemini 3 Pro** for OCR/metadata extraction and **8-way hybrid search** with Cohere reranking.
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green)
-![Claude](https://img.shields.io/badge/Claude-Sonnet-orange)
+![Gemini](https://img.shields.io/badge/Gemini_3_Pro-OCR-yellow)
+![Claude](https://img.shields.io/badge/Claude-Fallback-orange)
 
 ## Table of Contents
 
@@ -36,16 +37,17 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Frontend** | Next.js 15 (App Router) | React framework with server components |
-| **UI** | shadcn/ui + Tailwind CSS | Component library and styling |
-| **Database** | Supabase (PostgreSQL) | Data storage with pgvector extension |
-| **Vector Search** | pgvector + Voyage AI | Semantic similarity search |
-| **AI Extraction** | Claude Vision API | Extract metadata from chord sheet images |
-| **AI Chat** | Claude Sonnet | Generate helpful responses when needed |
-| **Storage** | Supabase Storage | Image file hosting |
-| **Language** | TypeScript | Type-safe development |
+| Layer | Technology | Purpose | Cost |
+|-------|------------|---------|------|
+| **Frontend** | Next.js 15 (App Router) | React framework with server components | Free |
+| **UI** | shadcn/ui + Tailwind CSS | Component library and styling | Free |
+| **Database** | Supabase (PostgreSQL + pgvector) | Data storage + lyrics_chunks table | Free/$25mo |
+| **Vector Search** | Voyage AI | voyage-multilingual-2 (1024d Korean-optimized) | ~$0.0001/query |
+| **OCR/Extraction** | Gemini 3 Pro Vision | Extract metadata from chord sheet images | $1.25/1K images |
+| **Reranking** | Cohere Rerank 3 | Cross-encoder reranking (Vercel-optimized) | ~$0.002/query |
+| **AI Chat** | Claude Sonnet | Fallback when no results found | $3-15/1M tokens |
+| **Storage** | Supabase Storage | Image file hosting | Included |
+| **Language** | TypeScript | Type-safe development | Free |
 
 ---
 
@@ -53,7 +55,7 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 
 ```
 +---------------------------------------------------------------------+
-|                        PRAISEFLOW SYSTEM                            |
+|                    PRAISEFLOW SYSTEM v2.0                           |
 +---------------------------------------------------------------------+
 
 +---------------------------------------------------------------------+
@@ -61,16 +63,23 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 |                       (One-time per image)                          |
 +---------------------------------------------------------------------+
 |                                                                     |
-|   Local Images --> Claude Vision --> Voyage AI --> Supabase         |
-|   (JPG/PNG)        (Extract text)    (Embeddings)  (Store all)      |
+|   Local Images --> Gemini 3 Pro --> Voyage AI --> Supabase          |
+|   (JPG/PNG)        (Vision/OCR)     (Dual Embed)  (Store all)       |
 |                                                                     |
-|   Extracts:                                                         |
+|   Gemini 3 Pro Extracts:                                            |
 |   - song_title (original language)                                  |
 |   - song_title_korean                                               |
 |   - song_title_english                                              |
-|   - song_key (G, A, Dm, etc.)                                       |
+|   - song_key (G, A, Dm, etc.) ← Key-aware deduplication             |
 |   - ocr_text (full page text)                                       |
-|   - 512-dim embedding vector                                        |
+|                                                                     |
+|   Voyage AI Generates:                                              |
+|   - embedding (512d voyage-3-lite)                                  |
+|   - embedding_multilingual (1024d voyage-multilingual-2) ← Korean   |
+|                                                                     |
+|   Lyrics Chunking:                                                  |
+|   - Split OCR text into lines → lyrics_chunks table                 |
+|   - Each chunk gets 1024d multilingual embedding                    |
 |                                                                     |
 +---------------------------------------------------------------------+
 
@@ -79,11 +88,11 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 |                     (Every user query)                              |
 +---------------------------------------------------------------------+
 |                                                                     |
-|   User Query --> Preprocess --> 7 PARALLEL SEARCHES --> RRF Fusion |
+|   User Query --> Preprocess --> 8 PARALLEL SEARCHES --> RRF Fusion  |
 |   "Holy Forever"                                                    |
 |                                                                     |
 |   ┌─────────────────────────────────────────────────────────────┐   |
-|   │           ALL 7 METHODS RUN IN PARALLEL                     │   |
+|   │           ALL 8 METHODS RUN IN PARALLEL                     │   |
 |   │                  (using Promise.all)                        │   |
 |   │                                                             │   |
 |   │  ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐        │   |
@@ -92,20 +101,26 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 |   │  │       │ │       │ │       │ │       │ │SHTEIN │        │   |
 |   │  └───┬───┘ └───┬───┘ └───┬───┘ └───┬───┘ └───┬───┘        │   |
 |   │      │         │         │         │         │             │   |
-|   │  ┌───┴───┐ ┌───┴───┐                                       │   |
-|   │  │VECTOR │ │  OCR  │                                       │   |
-|   │  │VOYAGE │ │ TEXT  │                                       │   |
-|   │  └───┬───┘ └───┬───┘                                       │   |
-|   │      │         │                                           │   |
-|   └──────┼─────────┼───────────────────────────────────────────┘   |
-|          │         │                                               |
-|          ▼         ▼                                               |
+|   │  ┌───┴───┐ ┌───┴───┐ ┌───┴───┐                            │   |
+|   │  │VECTOR │ │  OCR  │ │LYRICS │                            │   |
+|   │  │MULTI- │ │ TEXT  │ │CHUNKS │  ← All use 1024d           │   |
+|   │  │LINGUAL│ │       │ │       │    multilingual            │   |
+|   │  └───┬───┘ └───┬───┘ └───┬───┘                            │   |
+|   │      │         │         │                                 │   |
+|   └──────┼─────────┼─────────┼─────────────────────────────────┘   |
+|          │         │         │                                     |
+|          ▼         ▼         ▼                                     |
 |   ┌─────────────────────────────────────────────────────────────┐   |
 |   │         RECIPROCAL RANK FUSION (RRF)                        │   |
+|   │         Score = Σ 1/(60 + rank)                             │   |
+|   └─────────────────────────────────────────────────────────────┘   |
+|                              │                                      |
+|                              ▼                                      |
+|   ┌─────────────────────────────────────────────────────────────┐   |
+|   │              COHERE RERANKING                               │   |
 |   │                                                             │   |
-|   │   Formula: RRF(d) = Σ 1/(k + rank(d))  where k = 60        │   |
-|   │                                                             │   |
-|   │   Documents found by MULTIPLE methods get BOOSTED!          │   |
+|   │   Model: rerank-multilingual-v3.0                          │   |
+|   │   Latency: ~200-400ms (Vercel-optimized)                   │   |
 |   └─────────────────────────────────────────────────────────────┘   |
 |                                                                     |
 +---------------------------------------------------------------------+
@@ -126,6 +141,9 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 | (FREE)    (~$0.003)                                                 |
 |                                                                     |
 +---------------------------------------------------------------------+
+
+COST PER QUERY: ~$0.003 (Voyage + Cohere)
+ONE-TIME BATCH: ~$0.62 (Gemini OCR for 498 images)
 ```
 
 ---
@@ -156,9 +174,9 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
                               |
                               v
 +---------------------------------------------------------------+
-|  STEP 2: CLAUDE VISION EXTRACTION                             |
-|  API: Claude claude-sonnet-4-20250514 with Vision             |
-|  Cost: ~$0.008 per image                                      |
+|  STEP 2: GEMINI 3 PRO VISION EXTRACTION                       |
+|  API: gemini-3-pro-preview (Top-tier OCR as of Jan 2026)      |
+|  Cost: ~$0.00125 per image                                    |
 |                                                               |
 |  Prompt: "Extract song metadata as JSON..."                   |
 |                                                               |
@@ -166,28 +184,38 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 |  {                                                            |
 |    "song_title": "Holy Forever",                              |
 |    "song_title_korean": "거룩 영원히",                        |
-|    "song_key": "D",                                           |
+|    "song_key": "D",  ← Key-aware (same title, diff key = OK)  |
 |    "ocr_text": "Holy Forever\nCEC Worship\n..."               |
 |  }                                                            |
 +---------------------------------------------------------------+
                               |
                               v
 +---------------------------------------------------------------+
-|  STEP 3: EMBEDDING GENERATION                                 |
-|  API: Voyage AI (voyage-3-lite)                               |
-|  Cost: ~$0.00006 per embedding                                |
+|  STEP 3: DUAL EMBEDDING GENERATION                            |
+|  API: Voyage AI                                               |
+|                                                               |
+|  1. voyage-3-lite (512d) - General purpose                    |
+|     Cost: ~$0.00006 per embedding                             |
+|                                                               |
+|  2. voyage-multilingual-2 (1024d) - Korean optimized          |
+|     Cost: ~$0.00012 per embedding                             |
 |                                                               |
 |  Input: Combined text (title + korean + english + ocr_text)   |
-|  Output: 512-dimensional vector                               |
-|                                                               |
-|  This vector captures semantic meaning, enabling:             |
-|  - "worship song about God's glory" -> finds relevant songs   |
-|  - Matches even without exact keyword overlap                 |
+|  Output: Both vectors stored for hybrid search                |
 +---------------------------------------------------------------+
                               |
                               v
 +---------------------------------------------------------------+
-|  STEP 4: STORAGE                                              |
+|  STEP 4: LYRICS CHUNKING (for partial lyrics search)          |
+|                                                               |
+|  - Split ocr_text into individual lines                       |
+|  - Generate 1024d multilingual embedding per line             |
+|  - Store in lyrics_chunks table                               |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|  STEP 5: STORAGE                                              |
 |  Database: Supabase (PostgreSQL + pgvector)                   |
 |                                                               |
 |  - Upload image to Supabase Storage                           |
@@ -374,7 +402,7 @@ $$;
 
 ## Search Algorithm
 
-### The 7 Parallel Search Methods
+### The 8 Parallel Search Methods
 
 | # | Method | Description | Example |
 |---|--------|-------------|---------|
@@ -383,8 +411,21 @@ $$;
 | 3 | **Normalized Korean** | Match after removing spaces, NFC normalization | "위대하신주" = "위대하신 주" |
 | 4 | **Alias Lookup** | Cross-language mapping table | "Holy Forever" → "거룩 영원히" |
 | 5 | **Fuzzy (Levenshtein)** | Handles typos using edit distance | "위대하신쥬" → "위대하신주" |
-| 6 | **Vector (Semantic)** | Voyage AI embeddings for meaning | "praise about glory" → related |
+| 6 | **Vector (multilingual)** | voyage-multilingual-2 (1024d) Korean-optimized | "praise about glory" → related |
 | 7 | **OCR Text** | Search in extracted image text | Find by lyrics content |
+| 8 | **Lyrics Chunks** | Partial lyrics line matching | "나를 향한 주의 사랑" → finds song |
+
+> **Note:** We use only `voyage-multilingual-2` (1024d) for all vector operations. This model is specifically optimized for Korean ↔ English bilingual search, outperforming general models for our use case.
+
+### Reranking Pipeline (Cohere)
+
+After RRF fusion combines results from all 8 methods:
+
+| Stage | Model | Purpose | Latency |
+|-------|-------|---------|---------|
+| 1 | **Cohere rerank-multilingual-v3.0** | Cross-encoder reranking | ~200-400ms |
+
+> **Note:** We use Cohere only (not BGE) for Vercel deployment. BGE via HuggingFace has cold starts and timeouts that are unreliable for serverless.
 
 ### Reciprocal Rank Fusion (RRF)
 
@@ -586,23 +627,25 @@ Open http://localhost:3000
 
 ## Cost Analysis
 
-### One-time Extraction Costs
+### One-time Extraction Costs (v2.0)
 
-| API | Per Image | 100 Images | 1000 Images |
+| API | Per Image | 100 Images | 500 Images |
 |-----|-----------|------------|-------------|
-| Claude Vision | $0.008 | $0.80 | $8.00 |
-| Voyage AI Embedding | $0.00006 | $0.006 | $0.06 |
-| **Total** | **$0.008** | **$0.81** | **$8.06** |
+| Gemini 3 Pro Vision | $0.00125 | $0.125 | $0.62 |
+| Voyage AI (voyage-3-lite) | $0.00006 | $0.006 | $0.03 |
+| Voyage AI (multilingual) | $0.00012 | $0.012 | $0.06 |
+| **Total** | **$0.0014** | **$0.14** | **$0.71** |
 
-### Runtime Search Costs
+### Runtime Search Costs (v2.0)
 
-| Scenario | Cost | Frequency |
-|----------|------|-----------|
-| Database search (keyword match) | $0 | 95% of queries |
-| Voyage AI (vector search fallback) | $0.00006 | 4% of queries |
-| Claude Chat (no results / help) | $0.003 | 1% of queries |
+| Service | Cost | Notes |
+|---------|------|-------|
+| Supabase queries | $0 | Free tier / $25/mo Pro |
+| Voyage AI (multilingual) | ~$0.0001 | Per query embedding |
+| Cohere Rerank 3 | ~$0.002 | $2/1K searches |
+| Claude Chat (fallback) | ~$0.003 | Only when no results |
 
-**Average cost per search: ~$0.0001** (essentially free)
+**Average cost per search: ~$0.002** (Voyage + Cohere)
 
 ---
 
@@ -632,8 +675,8 @@ rag/
 │   └── ThemeProvider.tsx       # Dark/light theme
 │
 ├── lib/
-│   ├── hybrid-search.ts        # 7 parallel search methods + RRF
-│   ├── reranker.ts             # Cross-encoder reranking (Cohere/BGE)
+│   ├── hybrid-search.ts        # 8 parallel search methods + RRF
+│   ├── reranker.ts             # Cross-encoder reranking (Cohere)
 │   ├── claude.ts               # Claude API utilities
 │   ├── embeddings.ts           # Voyage AI integration
 │   ├── i18n.ts                 # Translations (ko/en)

@@ -1,6 +1,6 @@
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const VOYAGE_MODEL = 'voyage-3-lite' // 512 dimensions, optimized for speed
+const VOYAGE_MODEL = 'voyage-multilingual-2' // 1024 dimensions, Korean-optimized
 
 interface VoyageEmbeddingResponse {
   object: string

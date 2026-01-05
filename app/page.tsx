@@ -15,8 +15,7 @@ import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, type CarouselApi } from '@/components/ui/carousel'
-import { setCarouselDragging } from '@/lib/carousel-state'
+import { KeenCarousel, KeenSlide } from '@/components/ui/keen-carousel'
 
 interface RelatedPage {
   id: string
@@ -444,36 +443,22 @@ export default function Home() {
                                 )}
                                 <span className="text-muted-foreground/60">• {language === 'ko' ? '스와이프하여 더 보기' : 'Swipe for more'}</span>
                               </p>
-                              <Carousel
-                                opts={{ align: 'start', loop: false, dragFree: true }}
-                                className="w-full"
-                                setApi={(api) => {
-                                  if (api) {
-                                    api.on('pointerDown', () => setCarouselDragging(true))
-                                    api.on('pointerUp', () => setCarouselDragging(false))
-                                    api.on('settle', () => setCarouselDragging(false))
-                                  }
-                                }}
-                              >
-                                <CarouselContent className="-ml-2 sm:-ml-3">
-                                  {msg.images.map((image) => (
-                                    <CarouselItem key={image.id} className="pl-2 sm:pl-3 basis-[42%] sm:basis-[30%]">
-                                      <ImageCard
-                                        url={image.url}
-                                        filename={image.filename}
-                                        ocrText={image.ocrText}
-                                        songKey={image.songKey}
-                                        isFromGoogle={image.isFromGoogle}
-                                        relatedPages={image.relatedPages}
-                                        totalPages={image.totalPages}
-                                        availableKeys={image.availableKeys}
-                                      />
-                                    </CarouselItem>
-                                  ))}
-                                </CarouselContent>
-                                <CarouselPrevious className="hidden sm:flex -left-4 bg-background/80 backdrop-blur-sm" />
-                                <CarouselNext className="hidden sm:flex -right-4 bg-background/80 backdrop-blur-sm" />
-                              </Carousel>
+                              <KeenCarousel className="w-full" mobileSlidesPerView={2.3} slidesPerView={3.3} spacing={8}>
+                                {msg.images.map((image) => (
+                                  <KeenSlide key={image.id}>
+                                    <ImageCard
+                                      url={image.url}
+                                      filename={image.filename}
+                                      ocrText={image.ocrText}
+                                      songKey={image.songKey}
+                                      isFromGoogle={image.isFromGoogle}
+                                      relatedPages={image.relatedPages}
+                                      totalPages={image.totalPages}
+                                      availableKeys={image.availableKeys}
+                                    />
+                                  </KeenSlide>
+                                ))}
+                              </KeenCarousel>
                             </div>
                           ) : (
                             /* Regular grid for 1-2 results */
