@@ -15,7 +15,7 @@ import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { KeenCarousel, KeenSlide } from '@/components/ui/keen-carousel'
+// import { KeenCarousel, KeenSlide } from '@/components/ui/keen-carousel'
 
 interface RelatedPage {
   id: string
@@ -427,41 +427,39 @@ export default function Home() {
                       {msg.images && msg.images.length > 0 && (
                         <>
                           {/* Use Carousel for 3+ images, grid for smaller sets */}
-                          {msg.images.length > 2 ? (
-                            <div className="mt-2 sm:mt-3">
-                              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                                {msg.images[0]?.isFromGoogle ? (
-                                  <>
-                                    <Globe className="w-3 h-3" />
-                                    {language === 'ko' ? `웹 검색 결과 ${msg.images.length}개` : `${msg.images.length} web results`}
-                                  </>
-                                ) : (
-                                  <>
-                                    <Music className="w-3 h-3" />
-                                    {language === 'ko' ? `검색 결과 ${msg.images.length}개` : `${msg.images.length} results`}
-                                  </>
-                                )}
-                                <span className="text-muted-foreground/60">• {language === 'ko' ? '스와이프하여 더 보기' : 'Swipe for more'}</span>
-                              </p>
-                              <KeenCarousel className="w-full" mobileSlidesPerView={2.3} slidesPerView={3.3} spacing={8}>
-                                {msg.images.map((image) => (
-                                  <KeenSlide key={image.id}>
-                                    <ImageCard
-                                      url={image.url}
-                                      filename={image.filename}
-                                      ocrText={image.ocrText}
-                                      songKey={image.songKey}
-                                      isFromGoogle={image.isFromGoogle}
-                                      relatedPages={image.relatedPages}
-                                      totalPages={image.totalPages}
-                                      availableKeys={image.availableKeys}
-                                    />
-                                  </KeenSlide>
-                                ))}
-                              </KeenCarousel>
+                          {/* Grid layout for all results */}
+                          <div className="mt-2 sm:mt-3">
+                            <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                              {msg.images[0]?.isFromGoogle ? (
+                                <>
+                                  <Globe className="w-3 h-3" />
+                                  {language === 'ko' ? `웹 검색 결과 ${msg.images.length}개` : `${msg.images.length} web results`}
+                                </>
+                              ) : (
+                                <>
+                                  <Music className="w-3 h-3" />
+                                  {language === 'ko' ? `검색 결과 ${msg.images.length}개` : `${msg.images.length} results`}
+                                </>
+                              )}
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+                              {msg.images.map((image) => (
+                                <ImageCard
+                                  key={image.id}
+                                  url={image.url}
+                                  filename={image.filename}
+                                  ocrText={image.ocrText}
+                                  songKey={image.songKey}
+                                  isFromGoogle={image.isFromGoogle}
+                                  relatedPages={image.relatedPages}
+                                  totalPages={image.totalPages}
+                                  availableKeys={image.availableKeys}
+                                />
+                              ))}
                             </div>
-                          ) : (
-                            /* Regular grid for 1-2 results */
+                          </div>
+                          {false && (
+                            /* Hidden - keeping for reference */
                             <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
                               {msg.images.map((image) => (
                                 <ImageCard
