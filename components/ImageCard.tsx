@@ -47,6 +47,10 @@ export function ImageCard({
   const [isDownloading, setIsDownloading] = useState(false)
   const transformRef = useRef<ReactZoomPanPinchRef>(null)
 
+  // Touch tracking to distinguish tap vs swipe
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
+  const isDraggingRef = useRef(false)
+
   const title = ocrText?.split('\n').find(line => line.trim().length > 0)?.substring(0, 30) || filename
 
   // Combine main page with related pages for navigation
@@ -179,11 +183,58 @@ export function ImageCard({
     transformRef.current?.resetTransform()
   }
 
+  // Touch handlers to distinguish tap vs swipe (for carousel compatibility)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    }
+    isDraggingRef.current = false
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return
+    const touch = e.touches[0]
+    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
+    // If moved more than 10px in any direction, it's a drag/swipe
+    if (deltaX > 10 || deltaY > 10) {
+      isDraggingRef.current = true
+    }
+  }
+
+  const handleTouchEnd = () => {
+    // Only open modal if it was a tap (not a swipe)
+    if (!isDraggingRef.current && touchStartRef.current) {
+      const elapsed = Date.now() - touchStartRef.current.time
+      // Quick tap (under 300ms) and no movement = open modal
+      if (elapsed < 300) {
+        setIsOpen(true)
+      }
+    }
+    touchStartRef.current = null
+    isDraggingRef.current = false
+  }
+
+  const handleClick = (e: React.MouseEvent) => {
+    // On touch devices, the touch handlers manage opening
+    // On desktop (mouse), use click directly
+    // Check if it's a mouse event (not triggered by touch)
+    if (e.detail > 0) { // detail > 0 means actual click, not touch
+      setIsOpen(true)
+    }
+  }
+
   return (
     <>
       <Card
         className="group cursor-pointer overflow-hidden border-border hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 active:scale-[0.98] bg-card hover:-translate-y-0.5"
-        onClick={() => setIsOpen(true)}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div className="relative aspect-[3/4] bg-muted">
           {/* Prominent Key Badge - Top Right */}
