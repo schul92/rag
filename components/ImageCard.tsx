@@ -49,6 +49,7 @@ export function ImageCard({
 
   // Touch tracking to distinguish tap vs swipe (for carousel compatibility)
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
+  const isDraggingRef = useRef(false) // Set to true during any drag movement
   const touchHandledRef = useRef(false) // Prevents synthetic click after touch
 
   const title = ocrText?.split('\n').find(line => line.trim().length > 0)?.substring(0, 30) || filename
@@ -184,8 +185,8 @@ export function ImageCard({
   }
 
   // Touch handlers to distinguish tap vs swipe (for carousel compatibility)
-  // The problem: carousel swipe triggers card click, opening modal unexpectedly
-  // Solution: Track touch start/end positions and only open on genuine taps
+  // Problem: When swiping carousel, the card underneath captures touch and opens modal
+  // Solution: Detect ANY movement during touch and prevent modal opening
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0]
     touchStartRef.current = {
@@ -193,31 +194,43 @@ export function ImageCard({
       y: touch.clientY,
       time: Date.now()
     }
+    isDraggingRef.current = false // Reset dragging flag
   }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // Detect movement early - even small movement means it's a drag, not a tap
+    if (!touchStartRef.current) return
+
+    const touch = e.touches[0]
+    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
+
+    // Very low threshold (5px) - any intentional movement = drag
+    if (deltaX > 5 || deltaY > 5) {
+      isDraggingRef.current = true
+    }
+  }
+
+  const handleTouchEnd = () => {
     // Mark that touch handled this interaction (prevents synthetic click)
     touchHandledRef.current = true
 
-    if (touchStartRef.current && e.changedTouches.length > 0) {
-      const touch = e.changedTouches[0]
-      const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
-      const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
+    // Only open modal if:
+    // 1. No dragging was detected during touchMove
+    // 2. Quick interaction (< 200ms)
+    // 3. Touch start was recorded
+    if (touchStartRef.current && !isDraggingRef.current) {
       const elapsed = Date.now() - touchStartRef.current.time
-
-      // Only open modal if:
-      // 1. Very little movement (< 8px) - it's a tap, not swipe
-      // 2. Quick interaction (< 250ms) - not a long press or drag
-      const isTap = deltaX < 8 && deltaY < 8 && elapsed < 250
-
-      if (isTap) {
+      if (elapsed < 200) {
         setIsOpen(true)
       }
     }
 
+    // Reset refs
     touchStartRef.current = null
+    isDraggingRef.current = false
 
-    // Reset flag after browser's synthetic click event would fire (~300ms)
+    // Reset flag after browser's synthetic click event would fire
     setTimeout(() => {
       touchHandledRef.current = false
     }, 400)
@@ -240,6 +253,7 @@ export function ImageCard({
         className="group cursor-pointer overflow-hidden border-border hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 active:scale-[0.98] bg-card hover:-translate-y-0.5"
         onClick={handleClick}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         <div className="relative aspect-[3/4] bg-muted">
