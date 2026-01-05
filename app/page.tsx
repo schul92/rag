@@ -58,6 +58,7 @@ export default function Home() {
   const [searchInput, setSearchInput] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const isComposingRef = useRef(false)
 
   // Prevent hydration mismatch from browser extensions (like Dark Reader)
@@ -110,9 +111,11 @@ export default function Home() {
     }
   }, [loadingPhase, currentQuery, t])
 
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    // Use scrollIntoView for better mobile compatibility
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [messages, isLoading])
 
@@ -359,7 +362,7 @@ export default function Home() {
         <>
           {/* Messages Area - Scrollable */}
           <div className="flex-1 max-w-4xl mx-auto px-3 sm:px-4 w-full overflow-hidden">
-            <ScrollArea className="h-[calc(100dvh-180px)] sm:h-[calc(100dvh-200px)]" ref={scrollRef}>
+            <ScrollArea className="h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" ref={scrollRef}>
               <div className="space-y-4 sm:space-y-6 py-4 sm:py-6 pb-20">
                 {messages.map((msg, index) => (
                   <div
@@ -441,12 +444,12 @@ export default function Home() {
                                 <span className="text-muted-foreground/60">• {language === 'ko' ? '스와이프하여 더 보기' : 'Swipe for more'}</span>
                               </p>
                               <Carousel
-                                opts={{ align: 'start', loop: false }}
+                                opts={{ align: 'start', loop: false, dragFree: true }}
                                 className="w-full"
                               >
-                                <CarouselContent className="-ml-2">
+                                <CarouselContent className="-ml-2 sm:-ml-3">
                                   {msg.images.map((image) => (
-                                    <CarouselItem key={image.id} className="pl-2 basis-[45%] sm:basis-[32%]">
+                                    <CarouselItem key={image.id} className="pl-2 sm:pl-3 basis-[42%] sm:basis-[30%]">
                                       <ImageCard
                                         url={image.url}
                                         filename={image.filename}
@@ -545,6 +548,9 @@ export default function Home() {
                     </Card>
                   </div>
                 )}
+
+                {/* Scroll anchor for auto-scroll */}
+                <div ref={messagesEndRef} className="h-1" />
               </div>
             </ScrollArea>
           </div>
