@@ -15,7 +15,8 @@ import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from '@/components/ui/carousel'
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, type CarouselApi } from '@/components/ui/carousel'
+import { setCarouselDragging } from '@/lib/carousel-state'
 
 interface RelatedPage {
   id: string
@@ -446,6 +447,13 @@ export default function Home() {
                               <Carousel
                                 opts={{ align: 'start', loop: false, dragFree: true }}
                                 className="w-full"
+                                setApi={(api) => {
+                                  if (api) {
+                                    api.on('pointerDown', () => setCarouselDragging(true))
+                                    api.on('pointerUp', () => setCarouselDragging(false))
+                                    api.on('settle', () => setCarouselDragging(false))
+                                  }
+                                }}
                               >
                                 <CarouselContent className="-ml-2 sm:-ml-3">
                                   {msg.images.map((image) => (

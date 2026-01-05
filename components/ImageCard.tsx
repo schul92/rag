@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Music, X, Globe, Download, Share2, Check, ChevronLeft, ChevronRight, FileStack, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
+import { isCarouselDragging } from '@/lib/carousel-state'
 
 interface RelatedPage {
   id: string
@@ -47,10 +48,6 @@ export function ImageCard({
   const [isDownloading, setIsDownloading] = useState(false)
   const transformRef = useRef<ReactZoomPanPinchRef>(null)
 
-  // Touch tracking to distinguish tap vs swipe (for carousel compatibility)
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
-  const isDraggingRef = useRef(false) // Set to true during any drag movement
-  const touchHandledRef = useRef(false) // Prevents synthetic click after touch
 
   const title = ocrText?.split('\n').find(line => line.trim().length > 0)?.substring(0, 30) || filename
 
@@ -184,66 +181,13 @@ export function ImageCard({
     transformRef.current?.resetTransform()
   }
 
-  // Touch handlers to distinguish tap vs swipe (for carousel compatibility)
-  // Problem: When swiping carousel, the card underneath captures touch and opens modal
-  // Solution: Detect ANY movement during touch and prevent modal opening
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    touchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      time: Date.now()
-    }
-    isDraggingRef.current = false // Reset dragging flag
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    // Detect movement early - even small movement means it's a drag, not a tap
-    if (!touchStartRef.current) return
-
-    const touch = e.touches[0]
-    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
-    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
-
-    // Very low threshold (5px) - any intentional movement = drag
-    if (deltaX > 5 || deltaY > 5) {
-      isDraggingRef.current = true
-    }
-  }
-
-  const handleTouchEnd = () => {
-    // Mark that touch handled this interaction (prevents synthetic click)
-    touchHandledRef.current = true
-
-    // Only open modal if:
-    // 1. No dragging was detected during touchMove
-    // 2. Quick interaction (< 200ms)
-    // 3. Touch start was recorded
-    if (touchStartRef.current && !isDraggingRef.current) {
-      const elapsed = Date.now() - touchStartRef.current.time
-      if (elapsed < 200) {
-        setIsOpen(true)
-      }
-    }
-
-    // Reset refs
-    touchStartRef.current = null
-    isDraggingRef.current = false
-
-    // Reset flag after browser's synthetic click event would fire
-    setTimeout(() => {
-      touchHandledRef.current = false
-    }, 400)
-  }
-
-  const handleClick = (e: React.MouseEvent) => {
-    // Skip if touch already handled this (prevents double-open from synthetic click)
-    if (touchHandledRef.current) {
-      e.preventDefault()
-      e.stopPropagation()
+  // Simple click handler that checks global carousel drag state
+  // The carousel tracks drag state via embla API events
+  const handleClick = () => {
+    // Don't open if carousel is currently dragging or just finished dragging
+    if (isCarouselDragging()) {
       return
     }
-    // Desktop click - open modal
     setIsOpen(true)
   }
 
@@ -252,9 +196,6 @@ export function ImageCard({
       <Card
         className="group cursor-pointer overflow-hidden border-border hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 active:scale-[0.98] bg-card hover:-translate-y-0.5"
         onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         <div className="relative aspect-[3/4] bg-muted">
           {/* Prominent Key Badge - Top Right */}
