@@ -781,13 +781,23 @@ export async function POST(request: NextRequest) {
     // Check if there's a meaningful song query along with the key request
     // e.g., "광대하신 주 c키" -> songQuery = "광대하신 주", key = "C"
     // But "c키 찬양5개" -> songQuery might be "5개" which is NOT a song name
-    const fillerPrefixes = ['찬양', '악보', '리스트', '목록', '곡', '노래', 'songs', 'sheets', 'list', '줘', '주세요', '찾아']
+    const fillerWords = ['찬양', '악보', '리스트', '목록', '곡', '노래', 'songs', 'sheets', 'list', '줘', '주세요', '찾아', '찾아줘', '보여줘', '알려줘', '추천', '추천해줘', '개', '장']
     const songQueryLower = (keyQuery.songQuery || '').toLowerCase().trim()
 
     // Check if songQuery is meaningful (not just numbers/counts or filler words)
-    const isJustCount = /^\d+\s*(개|곡|장)?$/.test(songQueryLower)  // "5개", "3곡", etc.
-    const isFillerOnly = fillerPrefixes.some(filler => songQueryLower.startsWith(filler) || songQueryLower === filler)
-    const hasSongQuery = songQueryLower.length >= 2 && !isJustCount && !isFillerOnly
+    // Remove all filler words and numbers, see if anything meaningful remains
+    let remainingQuery = songQueryLower
+    // Remove numbers and count suffixes (e.g., "5개", "3곡")
+    remainingQuery = remainingQuery.replace(/\d+\s*(개|곡|장)?/g, '').trim()
+    // Remove all filler words
+    for (const filler of fillerWords) {
+      remainingQuery = remainingQuery.replace(new RegExp(filler, 'gi'), '').trim()
+    }
+    // Remove extra spaces
+    remainingQuery = remainingQuery.replace(/\s+/g, ' ').trim()
+
+    // hasSongQuery is true only if something meaningful remains after removing fillers
+    const hasSongQuery = remainingQuery.length >= 2
 
     // CASE 1: Key list query (e.g., "A 코드 찬양리스트") - NO specific song mentioned
     if (keyQuery.isKeyQuery && keyQuery.requestedKey && !hasSongQuery) {
