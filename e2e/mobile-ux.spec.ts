@@ -51,8 +51,8 @@ test.describe('Mobile UX', () => {
     const btnBox = await quickSearchBtn.boundingBox();
     expect(btnBox?.height).toBeGreaterThanOrEqual(40);
 
-    // Tap the button
-    await quickSearchBtn.tap();
+    // Tap/click the button
+    await quickSearchBtn.click();
 
     // Wait for loading
     await page.waitForSelector('[class*="animate-spin"]', { state: 'detached', timeout: 60000 });
