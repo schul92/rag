@@ -6,11 +6,16 @@ import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger, DrawerClose } from '@/components/ui/drawer'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { ChatInput } from '@/components/ChatInput'
 import { ImageCard } from '@/components/ImageCard'
 import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
-import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Mic2, Star } from 'lucide-react'
+import { useMediaQuery } from '@/hooks/use-media-query'
+import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from '@/components/ui/carousel'
 
 interface RelatedPage {
   id: string
@@ -38,18 +43,27 @@ interface Message {
   content: string
   images?: ChatImage[]
   keyOptions?: string[]  // Available keys for user to select
+  googleSearchUrl?: string  // URL to Google Images when API limit reached
 }
 
 export default function Home() {
   const { theme, toggleTheme } = useTheme()
   const { language, setLanguage, t } = useLanguage()
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const [mounted, setMounted] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [loadingPhase, setLoadingPhase] = useState(0)
   const [currentQuery, setCurrentQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const isComposingRef = useRef(false)
+
+  // Prevent hydration mismatch from browser extensions (like Dark Reader)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Initialize welcome message with current language
   useEffect(() => {
@@ -142,6 +156,7 @@ export default function Home() {
         content: data.message,
         images: data.images,
         keyOptions: data.needsKeySelection ? data.availableKeys : undefined,
+        googleSearchUrl: data.googleSearchUrl,  // For API limit fallback
       }
       setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
@@ -158,12 +173,39 @@ export default function Home() {
 
   const quickSearches = [
     { term: '오 베들레헴', icon: Star, color: 'text-amber-500' },
+    { term: '내 평생 사는 동안', icon: Heart, color: 'text-rose-500' },
+    { term: '지극히 높으신 주', icon: Sparkles, color: 'text-purple-500' },
     { term: 'G키 찬양 5개', icon: Music, color: 'text-emerald-500' },
-    { term: '거룩하신 어린양', icon: Heart, color: 'text-rose-500' },
-    { term: 'D키 악보 3개', icon: BookOpen, color: 'text-blue-500' },
+    { term: '광대하신 주님', icon: Star, color: 'text-blue-500' },
+    { term: '예수로 나의 구주 삼고', icon: Heart, color: 'text-pink-500' },
   ]
 
   const isInitialState = messages.length <= 1
+
+  // Show loading skeleton until mounted to prevent hydration mismatch from browser extensions
+  if (!mounted) {
+    return (
+      <div className="h-[100dvh] bg-background flex flex-col">
+        <header className="shrink-0 z-50 backdrop-blur-lg bg-background/80 border-b border-border">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 animate-pulse" />
+                <div className="space-y-1.5">
+                  <div className="h-5 w-24 bg-muted rounded animate-pulse" />
+                  <div className="h-3 w-32 bg-muted rounded animate-pulse" />
+                </div>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-muted animate-pulse" />
+            </div>
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 animate-pulse" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`bg-background transition-colors duration-300 flex flex-col ${isInitialState ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'}`}>
@@ -188,76 +230,50 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Settings Button */}
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
-                  <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[90vw] max-w-sm sm:max-w-md rounded-2xl">
-                <DialogHeader>
-                  <DialogTitle className="text-lg">{t.settings}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  {/* Language Toggle */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Globe className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">{t.language}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {language === 'ko' ? '한국어' : 'English'}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLanguage(language === 'ko' ? 'en' : 'ko')}
-                      className="gap-2"
-                    >
-                      {language === 'ko' ? 'English' : '한국어'}
-                    </Button>
+            {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
+            {isDesktop ? (
+              <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
+                    <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="w-[90vw] max-w-sm sm:max-w-md rounded-2xl">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg">{t.settings}</DialogTitle>
+                  </DialogHeader>
+                  <SettingsContent
+                    language={language}
+                    setLanguage={setLanguage}
+                    theme={theme}
+                    toggleTheme={toggleTheme}
+                    t={t}
+                  />
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <Drawer open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <DrawerTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
+                    <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                  </Button>
+                </DrawerTrigger>
+                <DrawerContent>
+                  <DrawerHeader className="text-center">
+                    <DrawerTitle>{t.settings}</DrawerTitle>
+                  </DrawerHeader>
+                  <div className="px-4 pb-8">
+                    <SettingsContent
+                      language={language}
+                      setLanguage={setLanguage}
+                      theme={theme}
+                      toggleTheme={toggleTheme}
+                      t={t}
+                    />
                   </div>
-
-                  {/* Theme Toggle */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {theme === 'dark' ? (
-                        <Moon className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <Sun className="h-5 w-5 text-amber-500" />
-                      )}
-                      <div>
-                        <p className="text-sm font-medium">{t.theme}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {theme === 'dark' ? t.darkMode : t.lightMode}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleTheme}
-                      className="gap-2"
-                    >
-                      {theme === 'dark' ? (
-                        <>
-                          <Sun className="h-4 w-4" />
-                          {t.light}
-                        </>
-                      ) : (
-                        <>
-                          <Moon className="h-4 w-4" />
-                          {t.dark}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DrawerContent>
+              </Drawer>
+            )}
           </div>
         </div>
       </header>
@@ -370,42 +386,103 @@ export default function Home() {
                         <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                       </Card>
 
-                      {/* Key Selection Buttons */}
+                      {/* Key Selection Badges */}
                       {msg.keyOptions && msg.keyOptions.length > 0 && (
                         <div className="mt-2 sm:mt-3">
-                          <p className="text-xs text-muted-foreground mb-2">🎹 {t.keySelection}</p>
+                          <p className="text-xs text-muted-foreground mb-2">{t.keySelection}</p>
                           <div className="flex flex-wrap gap-1.5 sm:gap-2">
                             {msg.keyOptions.map((key) => (
-                              <Button
+                              <Badge
                                 key={key}
                                 variant="outline"
-                                size="sm"
+                                className="cursor-pointer text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-amber-300 dark:border-amber-700 hover:from-amber-100 hover:to-orange-100 dark:hover:from-amber-800/40 dark:hover:to-orange-800/40 hover:scale-105 transition-all duration-200 active:scale-95"
                                 onClick={() => handleSend(`${key} 키`)}
-                                className="rounded-full text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-800/30"
                               >
+                                <Music className="w-3 h-3 mr-1 text-amber-600 dark:text-amber-400" />
                                 {key}
-                              </Button>
+                              </Badge>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {msg.images && msg.images.length > 0 && (
-                        <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
-                          {msg.images.map((image) => (
-                            <ImageCard
-                              key={image.id}
-                              url={image.url}
-                              filename={image.filename}
-                              ocrText={image.ocrText}
-                              songKey={image.songKey}
-                              isFromGoogle={image.isFromGoogle}
-                              relatedPages={image.relatedPages}
-                              totalPages={image.totalPages}
-                              availableKeys={image.availableKeys}
-                            />
-                          ))}
+                      {/* Google Search Fallback Button */}
+                      {msg.googleSearchUrl && (
+                        <div className="mt-3">
+                          <a
+                            href={msg.googleSearchUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-blue-500/25"
+                          >
+                            <Search className="w-4 h-4" />
+                            {language === 'ko' ? 'Google에서 검색하기' : 'Search on Google'}
+                          </a>
                         </div>
+                      )}
+
+                      {msg.images && msg.images.length > 0 && (
+                        <>
+                          {/* Use Carousel for 3+ images, grid for smaller sets */}
+                          {msg.images.length > 2 ? (
+                            <div className="mt-2 sm:mt-3">
+                              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                                {msg.images[0]?.isFromGoogle ? (
+                                  <>
+                                    <Globe className="w-3 h-3" />
+                                    {language === 'ko' ? `웹 검색 결과 ${msg.images.length}개` : `${msg.images.length} web results`}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Music className="w-3 h-3" />
+                                    {language === 'ko' ? `검색 결과 ${msg.images.length}개` : `${msg.images.length} results`}
+                                  </>
+                                )}
+                                <span className="text-muted-foreground/60">• {language === 'ko' ? '스와이프하여 더 보기' : 'Swipe for more'}</span>
+                              </p>
+                              <Carousel
+                                opts={{ align: 'start', loop: false }}
+                                className="w-full"
+                              >
+                                <CarouselContent className="-ml-2">
+                                  {msg.images.map((image) => (
+                                    <CarouselItem key={image.id} className="pl-2 basis-[45%] sm:basis-[32%]">
+                                      <ImageCard
+                                        url={image.url}
+                                        filename={image.filename}
+                                        ocrText={image.ocrText}
+                                        songKey={image.songKey}
+                                        isFromGoogle={image.isFromGoogle}
+                                        relatedPages={image.relatedPages}
+                                        totalPages={image.totalPages}
+                                        availableKeys={image.availableKeys}
+                                      />
+                                    </CarouselItem>
+                                  ))}
+                                </CarouselContent>
+                                <CarouselPrevious className="hidden sm:flex -left-4 bg-background/80 backdrop-blur-sm" />
+                                <CarouselNext className="hidden sm:flex -right-4 bg-background/80 backdrop-blur-sm" />
+                              </Carousel>
+                            </div>
+                          ) : (
+                            /* Regular grid for 1-2 results */
+                            <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
+                              {msg.images.map((image) => (
+                                <ImageCard
+                                  key={image.id}
+                                  url={image.url}
+                                  filename={image.filename}
+                                  ocrText={image.ocrText}
+                                  songKey={image.songKey}
+                                  isFromGoogle={image.isFromGoogle}
+                                  relatedPages={image.relatedPages}
+                                  totalPages={image.totalPages}
+                                  availableKeys={image.availableKeys}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -423,26 +500,26 @@ export default function Home() {
                   <div className="flex gap-2 sm:gap-3 animate-fade-in-up">
                     <Avatar className="w-8 h-8 sm:w-10 sm:h-10 border-2 border-border shrink-0">
                       <AvatarFallback className="bg-gradient-to-br from-amber-500 to-orange-600 text-white">
-                        <Music className="w-4 h-4 sm:w-5 sm:h-5" />
+                        <Music className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
                       </AvatarFallback>
                     </Avatar>
-                    <Card className="px-3 sm:px-4 py-3 sm:py-4 bg-card border-border rounded-2xl rounded-bl-md min-w-[200px] sm:min-w-[280px]">
+                    <Card className="px-3 sm:px-4 py-3 sm:py-4 bg-card border-border rounded-2xl rounded-bl-md min-w-[200px] sm:min-w-[280px] shadow-lg">
                       <div className="space-y-3">
-                        {/* Animated loading bar */}
-                        <div className="relative h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 rounded-full animate-loading-bar"
-                            style={{
-                              width: `${Math.min(20 + loadingPhase * 20, 95)}%`,
-                              transition: 'width 0.5s ease-out'
-                            }}
+                        {/* Progress bar with gradient */}
+                        <div className="relative">
+                          <Progress
+                            value={Math.min(20 + loadingPhase * 20, 95)}
+                            className="h-2 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-amber-500 [&>div]:to-orange-500"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer rounded-full" />
                         </div>
 
                         {/* Loading message with icon */}
                         <div className="flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
+                          <div className="relative">
+                            <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
+                            <div className="absolute inset-0 w-4 h-4 bg-amber-500/20 rounded-full animate-ping" />
+                          </div>
                           <span
                             key={loadingPhase}
                             className="text-xs sm:text-sm text-foreground font-medium animate-fade-in"
@@ -451,15 +528,15 @@ export default function Home() {
                           </span>
                         </div>
 
-                        {/* Phase indicator dots */}
+                        {/* Phase indicator with badges */}
                         <div className="flex items-center gap-1.5">
                           {[0, 1, 2, 3, 4].map((phase) => (
                             <div
                               key={phase}
-                              className={`h-1 rounded-full transition-all duration-300 ${
+                              className={`h-1.5 rounded-full transition-all duration-500 ease-out ${
                                 phase <= loadingPhase
-                                  ? 'w-3 bg-amber-500'
-                                  : 'w-1.5 bg-muted-foreground/30'
+                                  ? 'w-4 bg-gradient-to-r from-amber-500 to-orange-500 shadow-sm shadow-amber-500/50'
+                                  : 'w-2 bg-muted-foreground/20'
                               }`}
                             />
                           ))}
@@ -483,6 +560,90 @@ export default function Home() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// Shared Settings Content Component
+interface SettingsContentProps {
+  language: string
+  setLanguage: (lang: 'ko' | 'en') => void
+  theme: string
+  toggleTheme: () => void
+  t: {
+    language: string
+    theme: string
+    darkMode: string
+    lightMode: string
+    light: string
+    dark: string
+  }
+}
+
+function SettingsContent({ language, setLanguage, theme, toggleTheme, t }: SettingsContentProps) {
+  return (
+    <div className="space-y-4 py-4">
+      {/* Language Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <Globe className="h-5 w-5 text-blue-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">{t.language}</p>
+            <p className="text-xs text-muted-foreground">
+              {language === 'ko' ? '한국어' : 'English'}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setLanguage(language === 'ko' ? 'en' : 'ko')}
+          className="gap-2 rounded-full hover:scale-105 active:scale-95 transition-transform"
+        >
+          {language === 'ko' ? 'EN' : '한'}
+        </Button>
+      </div>
+
+      {/* Theme Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+            theme === 'dark' ? 'bg-indigo-500/10' : 'bg-amber-500/10'
+          }`}>
+            {theme === 'dark' ? (
+              <Moon className="h-5 w-5 text-indigo-400" />
+            ) : (
+              <Sun className="h-5 w-5 text-amber-500" />
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-medium">{t.theme}</p>
+            <p className="text-xs text-muted-foreground">
+              {theme === 'dark' ? t.darkMode : t.lightMode}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleTheme}
+          className="gap-2 rounded-full hover:scale-105 active:scale-95 transition-transform"
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="h-4 w-4" />
+              {t.light}
+            </>
+          ) : (
+            <>
+              <Moon className="h-4 w-4" />
+              {t.dark}
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   )
 }

@@ -1,11 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Music, X, Globe, Download, Share2, Check, ChevronLeft, ChevronRight, FileStack } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Music, X, Globe, Download, Share2, Check, ChevronLeft, ChevronRight, FileStack, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
+import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
 
 interface RelatedPage {
   id: string
@@ -38,8 +41,11 @@ export function ImageCard({
 }: ImageCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const transformRef = useRef<ReactZoomPanPinchRef>(null)
 
   const title = ocrText?.split('\n').find(line => line.trim().length > 0)?.substring(0, 30) || filename
 
@@ -63,6 +69,8 @@ export function ImageCard({
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    setIsDownloading(true)
+    const toastId = toast.loading('다운로드 중...')
     try {
       const response = await fetch(currentPage.url)
       const blob = await response.blob()
@@ -74,13 +82,21 @@ export function ImageCard({
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(downloadUrl)
+      toast.success('다운로드 완료!', { id: toastId })
     } catch {
+      toast.error('다운로드 실패', { id: toastId })
       window.open(currentPage.url, '_blank')
+    } finally {
+      setIsDownloading(false)
     }
   }
 
   const handleDownloadAll = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    setIsDownloading(true)
+    const toastId = toast.loading(`전체 ${allPages.length}페이지 다운로드 중...`)
+    let successCount = 0
+
     // Download all pages sequentially
     for (let i = 0; i < allPages.length; i++) {
       try {
@@ -94,11 +110,19 @@ export function ImageCard({
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(downloadUrl)
+        successCount++
         await new Promise(resolve => setTimeout(resolve, 300)) // Small delay between downloads
       } catch {
         window.open(allPages[i].url, '_blank')
       }
     }
+
+    if (successCount === allPages.length) {
+      toast.success(`전체 ${allPages.length}페이지 다운로드 완료!`, { id: toastId })
+    } else {
+      toast.warning(`${successCount}/${allPages.length}페이지 다운로드됨`, { id: toastId })
+    }
+    setIsDownloading(false)
   }
 
   const handleShare = async (e: React.MouseEvent) => {
@@ -112,12 +136,14 @@ export function ImageCard({
           text: shareText,
           url: currentPage.url,
         })
+        toast.success('공유 완료!')
       } catch {
-        // User cancelled
+        // User cancelled - no toast needed
       }
     } else {
       await navigator.clipboard.writeText(currentPage.url)
       setCopied(true)
+      toast.success('링크가 복사되었습니다!')
       setTimeout(() => setCopied(false), 2000)
     }
   }
@@ -125,19 +151,38 @@ export function ImageCard({
   const goToPreviousPage = (e: React.MouseEvent) => {
     e.stopPropagation()
     setImageError(false) // Reset error state when changing pages
+    setImageLoading(true) // Show loading for new page
+    transformRef.current?.resetTransform() // Reset zoom when changing pages
     setCurrentPageIndex(prev => Math.max(0, prev - 1))
   }
 
   const goToNextPage = (e: React.MouseEvent) => {
     e.stopPropagation()
     setImageError(false) // Reset error state when changing pages
+    setImageLoading(true) // Show loading for new page
+    transformRef.current?.resetTransform() // Reset zoom when changing pages
     setCurrentPageIndex(prev => Math.min(allPages.length - 1, prev + 1))
+  }
+
+  const handleZoomIn = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    transformRef.current?.zoomIn()
+  }
+
+  const handleZoomOut = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    transformRef.current?.zoomOut()
+  }
+
+  const handleResetZoom = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    transformRef.current?.resetTransform()
   }
 
   return (
     <>
       <Card
-        className="group cursor-pointer overflow-hidden border-border hover:border-amber-500/50 hover:shadow-xl transition-all duration-300 active:scale-[0.98] bg-card"
+        className="group cursor-pointer overflow-hidden border-border hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 active:scale-[0.98] bg-card hover:-translate-y-0.5"
         onClick={() => setIsOpen(true)}
       >
         <div className="relative aspect-[3/4] bg-muted">
@@ -179,14 +224,25 @@ export function ImageCard({
             </div>
           )}
 
+          {/* Skeleton loading state */}
+          {imageLoading && !imageError && (
+            <div className="absolute inset-0 z-0">
+              <Skeleton className="w-full h-full rounded-none" />
+            </div>
+          )}
+
           {!imageError ? (
             <Image
               src={url}
               alt={title}
               fill
-              className="object-cover"
+              className={`object-cover transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
               sizes="(max-width: 768px) 50vw, 200px"
-              onError={() => setImageError(true)}
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
+                setImageError(true)
+                setImageLoading(false)
+              }}
               unoptimized={isFromGoogle}
             />
           ) : (
@@ -242,54 +298,99 @@ export function ImageCard({
             </Button>
           </div>
 
-          {/* Image with Navigation Arrows */}
-          <div className="relative flex-1 min-h-0 flex items-center justify-center">
+          {/* Image with Pinch-to-Zoom and Navigation Arrows */}
+          <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
             {/* Previous Page Button */}
             {hasMultiplePages && currentPageIndex > 0 && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute left-2 z-10 text-white bg-black/50 hover:bg-black/70 rounded-full h-10 w-10 sm:h-12 sm:w-12"
+                className="absolute left-2 z-20 text-white bg-black/50 hover:bg-black/70 rounded-full h-10 w-10 sm:h-12 sm:w-12"
                 onClick={goToPreviousPage}
               >
                 <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
               </Button>
             )}
 
-            {/* Current Page Image */}
-            <div className="relative w-full h-full">
-              {!imageError ? (
-                <Image
-                  key={currentPage.url}
-                  src={currentPage.url}
-                  alt={`${title} - 페이지 ${currentPageIndex + 1}`}
-                  fill
-                  className="object-contain p-2 sm:p-4"
-                  sizes="100vw"
-                  priority
-                  unoptimized={isFromGoogle}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <Music className="w-12 h-12 sm:w-16 sm:h-16 text-white/30 mx-auto mb-2" />
-                    <span className="text-sm sm:text-base text-white/50">이미지를 불러올 수 없습니다</span>
-                  </div>
-                </div>
-              )}
+            {/* Zoom Controls - Top Right */}
+            <div className="absolute top-2 right-2 z-20 flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white bg-black/50 hover:bg-black/70 rounded-full h-8 w-8"
+                onClick={handleZoomOut}
+              >
+                <ZoomOut className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white bg-black/50 hover:bg-black/70 rounded-full h-8 w-8"
+                onClick={handleResetZoom}
+              >
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white bg-black/50 hover:bg-black/70 rounded-full h-8 w-8"
+                onClick={handleZoomIn}
+              >
+                <ZoomIn className="w-4 h-4" />
+              </Button>
             </div>
+
+            {/* Current Page Image with Pinch-to-Zoom */}
+            <TransformWrapper
+              ref={transformRef}
+              initialScale={1}
+              minScale={0.5}
+              maxScale={4}
+              centerOnInit
+              doubleClick={{ mode: 'toggle', step: 2 }}
+              panning={{ velocityDisabled: true }}
+              wheel={{ step: 0.1 }}
+            >
+              <TransformComponent
+                wrapperStyle={{ width: '100%', height: '100%' }}
+                contentStyle={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {!imageError ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={currentPage.url}
+                    src={currentPage.url}
+                    alt={`${title} - 페이지 ${currentPageIndex + 1}`}
+                    className="max-w-full max-h-full object-contain p-2 sm:p-4"
+                    onError={() => setImageError(true)}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center">
+                    <div className="text-center">
+                      <Music className="w-12 h-12 sm:w-16 sm:h-16 text-white/30 mx-auto mb-2" />
+                      <span className="text-sm sm:text-base text-white/50">이미지를 불러올 수 없습니다</span>
+                    </div>
+                  </div>
+                )}
+              </TransformComponent>
+            </TransformWrapper>
 
             {/* Next Page Button */}
             {hasMultiplePages && currentPageIndex < allPages.length - 1 && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-2 z-10 text-white bg-black/50 hover:bg-black/70 rounded-full h-10 w-10 sm:h-12 sm:w-12"
+                className="absolute right-2 z-20 text-white bg-black/50 hover:bg-black/70 rounded-full h-10 w-10 sm:h-12 sm:w-12"
                 onClick={goToNextPage}
               >
                 <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
               </Button>
             )}
+          </div>
+
+          {/* Zoom Hint - shown on first view */}
+          <div className="text-center text-white/40 text-xs py-1 sm:hidden">
+            두 손가락으로 확대/축소 • 두 번 탭하여 확대
           </div>
 
           {/* Page Dots */}
@@ -303,7 +404,10 @@ export function ImageCard({
                       ? 'bg-amber-500 w-4'
                       : 'bg-white/30 hover:bg-white/50'
                   }`}
-                  onClick={() => setCurrentPageIndex(index)}
+                  onClick={() => {
+                    transformRef.current?.resetTransform()
+                    setCurrentPageIndex(index)
+                  }}
                 />
               ))}
             </div>
@@ -316,19 +420,29 @@ export function ImageCard({
                 <Button
                   variant="outline"
                   size="default"
-                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10"
+                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all active:scale-95"
                   onClick={handleDownload}
+                  disabled={isDownloading}
                 >
-                  <Download className="w-4 h-4" />
+                  {isDownloading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
                   이 페이지
                 </Button>
                 <Button
                   variant="outline"
                   size="default"
-                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10"
+                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all active:scale-95"
                   onClick={handleDownloadAll}
+                  disabled={isDownloading}
                 >
-                  <FileStack className="w-4 h-4" />
+                  {isDownloading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileStack className="w-4 h-4" />
+                  )}
                   전체 ({allPages.length})
                 </Button>
               </>
@@ -336,17 +450,22 @@ export function ImageCard({
               <Button
                 variant="outline"
                 size="default"
-                className="flex-1 max-w-[160px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-2 h-10"
+                className="flex-1 max-w-[160px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-2 h-10 transition-all active:scale-95"
                 onClick={handleDownload}
+                disabled={isDownloading}
               >
-                <Download className="w-5 h-5" />
+                {isDownloading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
                 다운로드
               </Button>
             )}
             <Button
               variant="outline"
               size="default"
-              className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10"
+              className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all active:scale-95"
               onClick={handleShare}
             >
               {copied ? (

@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { hybridSearch, RankedResult, normalizeKorean as normalizeKoreanHybrid } from '@/lib/hybrid-search'
 import { rerank } from '@/lib/reranker'
+// Google Image Search fallback (no key detection - user sees key in image)
+import { searchGoogleImages } from '@/lib/google-image-search'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -13,11 +15,11 @@ const anthropic = new Anthropic({
 
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const VOYAGE_MODEL = 'voyage-3-lite'
+const VOYAGE_MODEL = 'voyage-multilingual-2'  // 1024d, Korean-optimized
 
 // Configuration
-const USE_HYBRID_SEARCH = true     // Enable new hybrid search with RRF (set to false to use legacy)
-const USE_RERANKING = true         // Enable cross-encoder reranking (requires COHERE_API_KEY or HF_TOKEN)
+const USE_HYBRID_SEARCH = true     // Enable hybrid search with RRF
+const USE_RERANKING = true         // Enable Cohere reranking (requires COHERE_API_KEY)
 const RERANK_TOP_N = 10            // Number of candidates to rerank
 const MAX_SUGGESTIONS = 2          // Max number of song suggestions
 const SIMILARITY_THRESHOLD_LOW = 0.50  // Lower threshold for vector search
@@ -39,10 +41,12 @@ interface GroupedSongResult {
     similarity?: number
     matchType?: ScoredResult['matchType']
     matchedOn?: string
+    isFromGoogle?: boolean
   }>
   availableKeys: string[]
   selectedKey?: string
   totalPages: number
+  seenUrls?: Set<string>  // For deduplication during grouping
 }
 
 // Database record type
@@ -93,8 +97,9 @@ interface ScoredResult {
   song_title?: string
   song_key?: string
   score: number
-  matchType: 'exact' | 'normalized' | 'alias' | 'fuzzy' | 'vector'
+  matchType: 'exact' | 'normalized' | 'alias' | 'fuzzy' | 'vector' | 'google'
   matchedOn?: string  // What text was matched (e.g., "Holy Forever" for alias match)
+  isFromGoogle?: boolean  // True if result is from Google Image Search
 }
 
 // Check if song title or OCR text contains keywords from query (for filtering results)
@@ -164,12 +169,19 @@ function hasTextOverlap(ocrText: string, query: string, songTitle?: string): boo
 
 // Extract clean search terms from user query
 function extractSearchTerms(query: string): string {
-  const fillerWords = ['악보', '코드', 'sheet', 'chord', '찾아줘', '찾아', '주세요', '줘', '키', 'key', 'find', 'search', '가사', 'lyrics']
   let clean = query.toLowerCase()
+
+  // Remove key patterns first (e.g., "c키", "G코드", "Am key")
+  clean = clean.replace(/\b[a-g][#b]?m?\s*(키|코드|key)\b/gi, '')
+  clean = clean.replace(/\bkey\s+(of\s+)?[a-g][#b]?m?\b/gi, '')
+
+  // Remove filler words
+  const fillerWords = ['악보', '코드', 'sheet', 'chord', '찾아줘', '찾아', '주세요', '줘', '키', 'key', 'find', 'search', '가사', 'lyrics']
   for (const filler of fillerWords) {
     clean = clean.replace(new RegExp(filler, 'gi'), '')
   }
-  return clean.trim()
+
+  return clean.trim().replace(/\s+/g, ' ')  // Normalize spaces
 }
 
 // Extract requested count from message (e.g., "5개", "10곡", "3 songs")
@@ -205,13 +217,13 @@ interface KeyQuery {
 
 function detectKeyQuery(message: string): KeyQuery {
   // Common key patterns: A, B, C, D, E, F, G with optional #, b, m
-  // Use word boundaries to avoid matching inside words (e.g., "king" should not match)
+  // Note: \b doesn't work well with Korean, so use (?:^|[\s]) for start boundary
   const keyPatterns: Array<{ pattern: RegExp; keyGroup: number }> = [
-    // Korean: "A 코드 찬양", "G키 찬양", "C 키 악보"
-    { pattern: /\b([A-Ga-g][#b]?m?)\s*(코드|키|key)\s*(찬양|악보|리스트|목록|곡|노래)?/i, keyGroup: 1 },
-    // Korean: "A코드 찬양리스트"
-    { pattern: /\b([A-Ga-g][#b]?m?)(코드|키)\s*(찬양|악보|리스트|목록|곡|노래)?/i, keyGroup: 1 },
-    // English: "key of A", "in key A" (require "key" word to avoid false positives)
+    // Korean: "G키 찬양", "A 코드 찬양", "C키 악보 5개"
+    { pattern: /(?:^|[\s])([A-Ga-g][#b]?m?)\s*(키|코드)\s*(찬양|악보|리스트|목록|곡|노래)?/i, keyGroup: 1 },
+    // Korean at start: "G키 찬양 5개"
+    { pattern: /^([A-Ga-g][#b]?m?)(키|코드)\s/i, keyGroup: 1 },
+    // English: "key of A", "in key A"
     { pattern: /\bkey\s+of\s+([A-Ga-g][#b]?m?)\b/i, keyGroup: 1 },
     { pattern: /\bin\s+key\s+([A-Ga-g][#b]?m?)\b/i, keyGroup: 1 },
     { pattern: /\b([A-Ga-g][#b]?m?)\s+key\s*(songs?|sheets?|list)?\b/i, keyGroup: 1 },
@@ -447,11 +459,14 @@ async function findRelatedPages(
   // Sort by filename to get page order
   relatedPages.sort((a, b) => a.original_filename.localeCompare(b.original_filename))
 
-  // Remove duplicates
-  const seen = new Set<string>()
+  // Remove duplicates by both ID and URL (same image can have different IDs if uploaded multiple times)
+  const seenIds = new Set<string>()
+  const seenUrls = new Set<string>()
   return relatedPages.filter(r => {
-    if (seen.has(r.id)) return false
-    seen.add(r.id)
+    if (seenIds.has(r.id)) return false
+    if (seenUrls.has(r.image_url)) return false
+    seenIds.add(r.id)
+    seenUrls.add(r.image_url)
     return true
   })
 }
@@ -579,6 +594,7 @@ function groupResultsBySong(
     similarity?: number
     matchType?: ScoredResult['matchType']
     matchedOn?: string
+    isFromGoogle?: boolean  // True if from Google Image Search
   }>,
   requestedKey?: string
 ): GroupedSongResult[] {
@@ -605,10 +621,17 @@ function groupResultsBySong(
         pages: [],
         availableKeys: [],
         totalPages: 0,
+        seenUrls: new Set<string>(), // Track URLs to prevent duplicates
       })
     }
 
     const group = songMap.get(groupKey)!
+
+    // Skip if we already have this URL (duplicate image)
+    if (group.seenUrls?.has(result.image_url)) {
+      continue
+    }
+    group.seenUrls?.add(result.image_url)
 
     // Add page to the group
     group.pages.push(result)
@@ -663,23 +686,26 @@ function groupResultsBySong(
     return bScore - aScore
   })
 
-  // Deduplicate: Keep only the BEST version of each song (by normalized title)
-  // This removes inferior versions (fewer pages) of the same song
-  // Uses aggressive normalization to catch variations like "거룩하신 어린양 E" vs "거룩하신 어린양"
-  const bestByTitle = new Map<string, GroupedSongResult>()
+  // Deduplicate: Keep the BEST version of each song PER KEY
+  // Same title + different key = SEPARATE entries (not duplicates)
+  // Same title + same key = keep best version only
+  const bestByTitleAndKey = new Map<string, GroupedSongResult>()
   for (const group of grouped) {
     // Use aggressive normalization for dedup comparison
     const normalizedTitle = normalizeTitleForDedup(group.title)
-    console.log(`[Dedup] "${group.title}" -> normalized: "${normalizedTitle}"`)
+    // Include key in the dedup key to preserve different key versions
+    const songKey = group.availableKeys[0]?.toUpperCase() || 'unknown'
+    const dedupKey = `${normalizedTitle}::${songKey}`
+    console.log(`[Dedup] "${group.title}" (${songKey}) -> key: "${dedupKey}"`)
 
-    if (!bestByTitle.has(normalizedTitle)) {
-      // First (best) version of this song - keep it
-      bestByTitle.set(normalizedTitle, group)
+    if (!bestByTitleAndKey.has(dedupKey)) {
+      // First (best) version of this song in this key - keep it
+      bestByTitleAndKey.set(dedupKey, group)
     } else {
-      console.log(`[Dedup] Skipping duplicate: "${group.title}" (matches "${bestByTitle.get(normalizedTitle)?.title}")`)
+      console.log(`[Dedup] Skipping duplicate: "${group.title}" (${songKey}) (matches "${bestByTitleAndKey.get(dedupKey)?.title}")`)
     }
   }
-  grouped = Array.from(bestByTitle.values())
+  grouped = Array.from(bestByTitleAndKey.values())
 
   // Sort pages within each group by filename (for page order)
   grouped.forEach(g => {
@@ -749,10 +775,22 @@ export async function POST(request: NextRequest) {
       similarity?: number
       matchType?: ScoredResult['matchType']
       matchedOn?: string
+      isFromGoogle?: boolean
     }> = []
 
-    // CASE 1: Key list query (e.g., "A 코드 찬양리스트")
-    if (keyQuery.isKeyQuery && keyQuery.requestedKey) {
+    // Check if there's a meaningful song query along with the key request
+    // e.g., "광대하신 주 c키" -> songQuery = "광대하신 주", key = "C"
+    // But "c키 찬양5개" -> songQuery might be "5개" which is NOT a song name
+    const fillerPrefixes = ['찬양', '악보', '리스트', '목록', '곡', '노래', 'songs', 'sheets', 'list', '줘', '주세요', '찾아']
+    const songQueryLower = (keyQuery.songQuery || '').toLowerCase().trim()
+
+    // Check if songQuery is meaningful (not just numbers/counts or filler words)
+    const isJustCount = /^\d+\s*(개|곡|장)?$/.test(songQueryLower)  // "5개", "3곡", etc.
+    const isFillerOnly = fillerPrefixes.some(filler => songQueryLower.startsWith(filler) || songQueryLower === filler)
+    const hasSongQuery = songQueryLower.length >= 2 && !isJustCount && !isFillerOnly
+
+    // CASE 1: Key list query (e.g., "A 코드 찬양리스트") - NO specific song mentioned
+    if (keyQuery.isKeyQuery && keyQuery.requestedKey && !hasSongQuery) {
       const queryLimit = Math.max(20, (keyQuery.requestedCount || 5) * 3) // Fetch extra to account for grouping/filtering
       console.log(`[Key Query] Looking for songs in key: ${keyQuery.requestedKey}, requested count: ${keyQuery.requestedCount || 'default'}, query limit: ${queryLimit}`)
 
@@ -782,7 +820,7 @@ export async function POST(request: NextRequest) {
         console.log(`[Key Query] Found ${searchResults.length} songs in key ${keyQuery.requestedKey}`)
       }
     }
-    // CASE 2: Normal song search - HYBRID SEARCH WITH RRF
+    // CASE 2: Normal song search (includes "song name + key" like "광대하신 주 c키")
     else {
       const cleanSearchTerms = extractSearchTerms(message)
       console.log(`[Search] Query: "${message}" -> Clean: "${cleanSearchTerms}"`)
@@ -1016,14 +1054,62 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // No Google fallback - will use Claude suggestions instead if no results
+    // Google Image Search fallback when no DB results
+    if (searchResults.length === 0) {
+      console.log('[Fallback] No DB results, trying Google Images...')
+      const searchTerms = extractSearchTerms(message)
+
+      if (searchTerms.length >= 2) {
+        try {
+          const googleResponse = await searchGoogleImages(searchTerms, {
+            limit: 10,  // Show more results for better selection (free - no extra cost)
+            language: isKorean ? 'ko' : 'en'
+          })
+
+          // If daily limit reached, return early with Google search link
+          if (googleResponse.limitReached) {
+            console.log('[Fallback] Google API limit reached, providing direct link')
+            return NextResponse.json({
+              message: isKorean
+                ? '검색 결과가 없습니다. 아래 버튼을 눌러 Google에서 직접 검색해보세요.'
+                : 'No results found. Click the button below to search on Google.',
+              images: [],
+              googleSearchUrl: googleResponse.googleSearchUrl,
+              limitReached: true,
+            })
+          }
+
+          if (googleResponse.images.length > 0) {
+            console.log(`[Fallback] Found ${googleResponse.images.length} Google Images`)
+
+            // Transform Google results to match searchResults format
+            searchResults = googleResponse.images.map((img, index) => ({
+              id: `google_${Date.now()}_${index}`,
+              image_url: img.original,
+              original_filename: img.title || searchTerms,
+              ocr_text: `[웹 검색 결과] ${img.title || searchTerms}`,
+              song_title: img.title?.split(' - ')[0]?.split('|')[0]?.trim() || searchTerms,
+              song_key: undefined,  // User sees key in the image
+              similarity: 0.5,
+              matchType: 'google' as ScoredResult['matchType'],
+              matchedOn: searchTerms,
+              isFromGoogle: true,
+            }))
+          }
+        } catch (googleError) {
+          console.error('[Fallback] Google search failed:', googleError)
+        }
+      }
+    }
 
     // Group results by song title (combines multi-page sheets into one entry)
     const groupedResults = groupResultsBySong(searchResults, requestedKey || undefined)
     console.log(`[Grouping] ${searchResults.length} raw results -> ${groupedResults.length} grouped songs`)
 
     // Limit results: use requested count if specified, otherwise MAX_SUGGESTIONS
-    const resultLimit = keyQuery.requestedCount || MAX_SUGGESTIONS
+    // For Google results, show more (up to 8) for better selection
+    const isGoogleResults = searchResults.length > 0 && searchResults[0].isFromGoogle
+    const resultLimit = keyQuery.requestedCount || (isGoogleResults ? 8 : MAX_SUGGESTIONS)
     const limitedGroups = groupedResults.slice(0, resultLimit)
     console.log(`[Limiting] Showing ${limitedGroups.length} of ${groupedResults.length} songs (limit: ${resultLimit}, requested: ${keyQuery.requestedCount || 'default'})`)
 
@@ -1135,10 +1221,24 @@ No matching songs were found in the database or web search. Use the conversation
         // Combine group pages (excluding main) with additional related pages
         const groupRelatedPages = group.pages.slice(1)
 
-        // Deduplicate: only add additional related pages that aren't already in the group
+        // Deduplicate by both ID and URL
         const groupPageIds = new Set(group.pages.map(p => p.id))
-        const uniqueAdditionalRelated = additionalRelated.filter(rp => !groupPageIds.has(rp.id))
-        const allRelatedPages = [...groupRelatedPages, ...uniqueAdditionalRelated]
+        const groupPageUrls = new Set(group.pages.map(p => p.image_url))
+        const uniqueAdditionalRelated = additionalRelated.filter(rp =>
+          !groupPageIds.has(rp.id) && !groupPageUrls.has(rp.image_url)
+        )
+
+        // Filter group related pages to exclude duplicates of main page URL
+        const mainUrl = mainPage.image_url
+        const filteredGroupRelated = groupRelatedPages.filter(p => p.image_url !== mainUrl)
+
+        // Combine and deduplicate by URL
+        const seenUrls = new Set<string>([mainUrl])
+        const allRelatedPages = [...filteredGroupRelated, ...uniqueAdditionalRelated].filter(rp => {
+          if (seenUrls.has(rp.image_url)) return false
+          seenUrls.add(rp.image_url)
+          return true
+        })
 
         // Add all IDs to prevent duplicates across groups
         allRelatedPages.forEach(rp => allResultIds.add(rp.id))
@@ -1149,7 +1249,7 @@ No matching songs were found in the database or web search. Use the conversation
           filename: mainPage.original_filename,
           ocrText: mainPage.ocr_text,
           songKey: mainPage.song_key,
-          isFromGoogle: false,
+          isFromGoogle: mainPage.isFromGoogle || false,
           availableKeys: group.availableKeys,
           score: mainPage.similarity,
           matchType: mainPage.matchType,
@@ -1166,7 +1266,7 @@ No matching songs were found in the database or web search. Use the conversation
       })
     )
 
-    // Use database results only (Google search was removed - poor quality)
+    // Use database results
     const allImages = dbImagesWithRelated
 
     // Debug: Log what we're sending
