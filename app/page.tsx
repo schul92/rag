@@ -458,24 +458,6 @@ export default function Home() {
                               ))}
                             </div>
                           </div>
-                          {false && (
-                            /* Hidden - keeping for reference */
-                            <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
-                              {msg.images.map((image) => (
-                                <ImageCard
-                                  key={image.id}
-                                  url={image.url}
-                                  filename={image.filename}
-                                  ocrText={image.ocrText}
-                                  songKey={image.songKey}
-                                  isFromGoogle={image.isFromGoogle}
-                                  relatedPages={image.relatedPages}
-                                  totalPages={image.totalPages}
-                                  availableKeys={image.availableKeys}
-                                />
-                              ))}
-                            </div>
-                          )}
                         </>
                       )}
                     </div>
