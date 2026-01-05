@@ -15,7 +15,7 @@ import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight } from 'lucide-react'
-// import { KeenCarousel, KeenSlide } from '@/components/ui/keen-carousel'
+// Carousel disabled - using grid layout instead
 
 interface RelatedPage {
   id: string
@@ -425,40 +425,36 @@ export default function Home() {
                       )}
 
                       {msg.images && msg.images.length > 0 && (
-                        <>
-                          {/* Use Carousel for 3+ images, grid for smaller sets */}
-                          {/* Grid layout for all results */}
-                          <div className="mt-2 sm:mt-3">
-                            <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                              {msg.images[0]?.isFromGoogle ? (
-                                <>
-                                  <Globe className="w-3 h-3" />
-                                  {language === 'ko' ? `웹 검색 결과 ${msg.images.length}개` : `${msg.images.length} web results`}
-                                </>
-                              ) : (
-                                <>
-                                  <Music className="w-3 h-3" />
-                                  {language === 'ko' ? `검색 결과 ${msg.images.length}개` : `${msg.images.length} results`}
-                                </>
-                              )}
-                            </p>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-                              {msg.images.map((image) => (
-                                <ImageCard
-                                  key={image.id}
-                                  url={image.url}
-                                  filename={image.filename}
-                                  ocrText={image.ocrText}
-                                  songKey={image.songKey}
-                                  isFromGoogle={image.isFromGoogle}
-                                  relatedPages={image.relatedPages}
-                                  totalPages={image.totalPages}
-                                  availableKeys={image.availableKeys}
-                                />
-                              ))}
-                            </div>
+                        <div className="mt-2 sm:mt-3">
+                          <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                            {msg.images[0]?.isFromGoogle ? (
+                              <>
+                                <Globe className="w-3 h-3" />
+                                {language === 'ko' ? `웹 검색 결과 ${msg.images.length}개` : `${msg.images.length} web results`}
+                              </>
+                            ) : (
+                              <>
+                                <Music className="w-3 h-3" />
+                                {language === 'ko' ? `검색 결과 ${msg.images.length}개` : `${msg.images.length} results`}
+                              </>
+                            )}
+                          </p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+                            {msg.images.map((image) => (
+                              <ImageCard
+                                key={image.id}
+                                url={image.url}
+                                filename={image.filename}
+                                ocrText={image.ocrText}
+                                songKey={image.songKey}
+                                isFromGoogle={image.isFromGoogle}
+                                relatedPages={image.relatedPages}
+                                totalPages={image.totalPages}
+                                availableKeys={image.availableKeys}
+                              />
+                            ))}
                           </div>
-                        </>
+                        </div>
                       )}
                     </div>
 

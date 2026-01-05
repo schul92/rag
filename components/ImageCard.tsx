@@ -180,8 +180,8 @@ export function ImageCard({
     transformRef.current?.resetTransform()
   }
 
-  // Simple click handler - Keen Slider handles drag vs click automatically
-  // via the data-keen-slider-clickable attribute on the parent slide
+  // Simple click handler - Embla carousel handles drag vs click automatically
+  // NO manual touch handling needed - browsers prevent clicks during swipe
   const handleClick = () => {
     setIsOpen(true)
   }
