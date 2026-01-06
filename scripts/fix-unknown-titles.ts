@@ -10,7 +10,7 @@ const supabase = createClient(
 )
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!)
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' }) // Using flash for higher rate limits
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' }) // Best accuracy
 
 async function extractSongInfo(imageUrl: string) {
   const prompt = `Analyze this Korean worship song chord sheet image and extract:

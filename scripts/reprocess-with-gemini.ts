@@ -29,7 +29,7 @@ if (!GOOGLE_AI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(GOOGLE_AI_API_KEY)
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' })
 
 interface ExtractedInfo {
   title: string
@@ -93,7 +93,7 @@ Return ONLY valid JSON, no markdown or other text.`
 
 async function reprocessAllSongs() {
   console.log('Starting Gemini 3 Pro reprocessing...')
-  console.log('Model: gemini-2.0-flash-exp')
+  console.log('Model: gemini-3-pro-preview')
 
   // Get all songs
   const { data: songs, error } = await supabase

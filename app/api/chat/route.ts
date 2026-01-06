@@ -15,7 +15,7 @@ const anthropic = new Anthropic({
 
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const VOYAGE_MODEL = 'voyage-multilingual-2'  // 1024d, Korean-optimized
+const VOYAGE_MODEL = 'voyage-3-large'  // Best overall + multilingual, 1024d
 
 // Configuration
 const USE_HYBRID_SEARCH = true     // Enable hybrid search with RRF

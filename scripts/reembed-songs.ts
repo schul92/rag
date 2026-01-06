@@ -1,6 +1,6 @@
 /**
- * Re-embed all songs with voyage-multilingual-2 (1024d)
- * Korean-optimized embeddings for better bilingual search
+ * Re-embed all songs with voyage-3-large (1024d)
+ * Best overall + multilingual embeddings
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const VOYAGE_MODEL = 'voyage-multilingual-2'  // 1024d, Korean-optimized
+const VOYAGE_MODEL = 'voyage-3-large'  // Best overall + multilingual, 1024d
 
 interface VoyageEmbeddingResponse {
   data: Array<{ embedding: number[] }>
@@ -42,8 +42,8 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 async function reembedSongs() {
-  console.log('Re-embedding all songs with voyage-multilingual-2 (1024d)')
-  console.log('This model is optimized for Korean + English bilingual search\n')
+  console.log('Re-embedding all songs with voyage-3-large (1024d)')
+  console.log('Best overall + multilingual model\n')
 
   // Get all songs
   const { data: songs, error } = await supabase

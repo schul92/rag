@@ -31,7 +31,7 @@ async function generateBatchEmbeddings(texts: string[]): Promise<number[][]> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'voyage-multilingual-2',
+      model: 'voyage-3-large',
       input: texts, // Array of texts for batch processing
     }),
   })
@@ -86,7 +86,7 @@ function splitIntoChunks(ocrText: string): string[] {
 
 async function processLyricsChunks() {
   console.log('Starting lyrics chunk processing...')
-  console.log('Model: voyage-multilingual-2 (Korean-optimized)')
+  console.log('Model: voyage-3-large (best overall + multilingual)')
 
   // Get all songs
   const { data: songs, error } = await supabase

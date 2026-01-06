@@ -18,7 +18,7 @@ const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' })
 
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const VOYAGE_MODEL = 'voyage-multilingual-2'
+const VOYAGE_MODEL = 'voyage-3-large'  // Best overall + multilingual, 1024d
 
 // Process from the NEW folder
 const SOURCE_DIR = '/Users/stevesong/Documents/rag_kakao/new'
@@ -298,7 +298,7 @@ async function processImages() {
         image_url: imageUrl,
         original_filename: fileName,
         ocr_text: textForEmbedding,
-        embedding_multilingual: embedding,  // voyage-multilingual-2 uses 1024d
+        embedding_multilingual: embedding,  // voyage-3-large uses 1024d
         song_key: info.key || 'Unknown',
         song_title: info.title || null,
         song_title_korean: info.title_korean || null,
