@@ -68,9 +68,50 @@ export function ImageCard({
     console.log(`  Current page (${currentPageIndex + 1}): ${currentPage.url}`)
   }
 
+  // Detect platform for optimized download experience
+  const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+  const canShareFiles = typeof navigator !== 'undefined' && navigator.share && navigator.canShare?.({ files: [new File([], 'test.jpg', { type: 'image/jpeg' })] })
+
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation()
     setIsDownloading(true)
+
+    const filename = `${title}_${currentPage.songKey || 'sheet'}_p${currentPageIndex + 1}.jpg`
+
+    // Mobile with Share API support (iOS & modern Android)
+    if (isMobile && canShareFiles) {
+      const toastId = toast.loading('준비 중...')
+      try {
+        const response = await fetch(currentPage.url)
+        const blob = await response.blob()
+        const file = new File([blob], filename, { type: 'image/jpeg' })
+
+        await navigator.share({
+          files: [file],
+          title: `${title} 악보`,
+        })
+        toast.success('저장 완료!', { id: toastId })
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          toast.dismiss(toastId)
+        } else {
+          // Fallback: open in new tab with instruction
+          toast(isIOS ? '이미지를 길게 눌러 저장하세요' : '이미지를 길게 눌러 다운로드하세요', {
+            id: toastId,
+            duration: 4000,
+            icon: '💡',
+          })
+          window.open(currentPage.url, '_blank')
+        }
+      } finally {
+        setIsDownloading(false)
+      }
+      return
+    }
+
+    // Desktop or older mobile: Standard blob download
     const toastId = toast.loading('다운로드 중...')
     try {
       const response = await fetch(currentPage.url)
@@ -78,14 +119,18 @@ export function ImageCard({
       const downloadUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = downloadUrl
-      a.download = `${title}${currentPage.songKey ? `_${currentPage.songKey}` : ''}_p${currentPageIndex + 1}.jpg`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(downloadUrl)
       toast.success('다운로드 완료!', { id: toastId })
     } catch {
-      toast.error('다운로드 실패', { id: toastId })
+      // Final fallback: open in new tab
+      toast(isMobile ? '이미지를 길게 눌러 저장하세요' : '다운로드 실패', {
+        id: toastId,
+        icon: isMobile ? '💡' : undefined,
+      })
       window.open(currentPage.url, '_blank')
     } finally {
       setIsDownloading(false)
@@ -95,10 +140,47 @@ export function ImageCard({
   const handleDownloadAll = async (e: React.MouseEvent) => {
     e.stopPropagation()
     setIsDownloading(true)
+
+    // Mobile with Share API support (iOS & modern Android)
+    if (isMobile && canShareFiles) {
+      const toastId = toast.loading(`전체 ${allPages.length}페이지 준비 중...`)
+
+      try {
+        const files: File[] = []
+        for (let i = 0; i < allPages.length; i++) {
+          const response = await fetch(allPages[i].url)
+          const blob = await response.blob()
+          const file = new File([blob], `${title}_${songKey || 'sheet'}_p${i + 1}.jpg`, { type: 'image/jpeg' })
+          files.push(file)
+        }
+
+        // Check if browser supports sharing multiple files
+        if (navigator.canShare?.({ files })) {
+          await navigator.share({
+            files,
+            title: `${title} 악보 (${allPages.length}페이지)`,
+          })
+          toast.success('저장 완료!', { id: toastId })
+        } else {
+          // Fallback: share one at a time
+          toast('한 장씩 저장해 주세요', { id: toastId, icon: '💡', duration: 3000 })
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          toast.dismiss(toastId)
+        } else {
+          toast.error('저장 실패', { id: toastId })
+        }
+      } finally {
+        setIsDownloading(false)
+      }
+      return
+    }
+
+    // Desktop or older mobile: Standard download
     const toastId = toast.loading(`전체 ${allPages.length}페이지 다운로드 중...`)
     let successCount = 0
 
-    // Download all pages sequentially
     for (let i = 0; i < allPages.length; i++) {
       try {
         const response = await fetch(allPages[i].url)
@@ -106,13 +188,13 @@ export function ImageCard({
         const downloadUrl = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = downloadUrl
-        a.download = `${title}${songKey ? `_${songKey}` : ''}_p${i + 1}.jpg`
+        a.download = `${title}_${songKey || 'sheet'}_p${i + 1}.jpg`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(downloadUrl)
         successCount++
-        await new Promise(resolve => setTimeout(resolve, 300)) // Small delay between downloads
+        await new Promise(resolve => setTimeout(resolve, 300))
       } catch {
         window.open(allPages[i].url, '_blank')
       }
@@ -427,7 +509,7 @@ export function ImageCard({
                 <Button
                   variant="outline"
                   size="default"
-                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all active:scale-95"
+                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/30 hover:border-white/40 hover:scale-105 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all duration-200 active:scale-95"
                   onClick={handleDownload}
                   disabled={isDownloading}
                 >
@@ -436,12 +518,12 @@ export function ImageCard({
                   ) : (
                     <Download className="w-4 h-4" />
                   )}
-                  이 페이지
+                  {isMobile ? '이 페이지 저장' : '이 페이지'}
                 </Button>
                 <Button
                   variant="outline"
                   size="default"
-                  className="flex-1 max-w-[120px] sm:max-w-[140px] bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all active:scale-95"
+                  className="flex-1 max-w-[130px] sm:max-w-[150px] bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/40 hover:border-amber-400 hover:text-amber-200 hover:scale-105 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all duration-200 active:scale-95"
                   onClick={handleDownloadAll}
                   disabled={isDownloading}
                 >
@@ -450,14 +532,14 @@ export function ImageCard({
                   ) : (
                     <FileStack className="w-4 h-4" />
                   )}
-                  전체 ({allPages.length})
+                  전체 저장 ({allPages.length})
                 </Button>
               </>
             ) : (
               <Button
                 variant="outline"
                 size="default"
-                className="flex-1 max-w-[160px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-2 h-10 transition-all active:scale-95"
+                className="flex-1 max-w-[160px] bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/50 text-amber-300 hover:from-amber-500/40 hover:to-orange-500/40 hover:border-amber-400 hover:text-amber-200 hover:scale-105 gap-2 h-10 sm:h-11 transition-all duration-200 active:scale-95 font-medium"
                 onClick={handleDownload}
                 disabled={isDownloading}
               >
@@ -466,13 +548,13 @@ export function ImageCard({
                 ) : (
                   <Download className="w-5 h-5" />
                 )}
-                다운로드
+                {isMobile ? '사진 저장' : '다운로드'}
               </Button>
             )}
             <Button
               variant="outline"
               size="default"
-              className="flex-1 max-w-[120px] sm:max-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all active:scale-95"
+              className="flex-1 max-w-[100px] sm:max-w-[120px] bg-white/10 border-white/20 text-white hover:bg-blue-500/30 hover:border-blue-400/50 hover:text-blue-200 hover:scale-105 gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 transition-all duration-200 active:scale-95"
               onClick={handleShare}
             >
               {copied ? (

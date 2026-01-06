@@ -340,6 +340,14 @@ export async function searchVectorMultilingual(
     return []
   }
 
+  // Log top similarity scores for validation
+  if (data && data.length > 0) {
+    const topScores = data.slice(0, 3).map((r: SearchResult) =>
+      `${r.song_title?.slice(0, 20) || 'Unknown'}: ${(r.similarity || 0).toFixed(3)}`
+    )
+    console.log(`[Vector voyage-3-large] Top scores: ${topScores.join(', ')}`)
+  }
+
   return (data || []) as SearchResult[]
 }
 
