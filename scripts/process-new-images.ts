@@ -12,9 +12,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// Gemini for OCR
+// Gemini 3 Pro Preview - Best accuracy for OCR
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!)
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' })
 
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
@@ -154,13 +154,19 @@ async function checkForDuplicate(title: string, ocrText: string, key?: string): 
     const searchText = ocrText.substring(0, 100).replace(/[%_]/g, '')
     const { data: byOcr } = await supabase
       .from('song_images')
-      .select('id, song_title')
+      .select('id, song_title, song_key')
       .ilike('ocr_text', `%${searchText.substring(0, 50)}%`)
       .limit(3)
 
     if (byOcr && byOcr.length > 0) {
-      console.log(`     Found potential duplicate by OCR: "${byOcr[0].song_title}"`)
-      return { isDuplicate: true, existingId: byOcr[0].id }
+      // Check if same key
+      const sameKeyMatch = byOcr.find(song =>
+        song.song_key?.toLowerCase() === key?.toLowerCase()
+      )
+      if (sameKeyMatch) {
+        console.log(`     Found duplicate by OCR: "${sameKeyMatch.song_title}" (${sameKeyMatch.song_key})`)
+        return { isDuplicate: true, existingId: sameKeyMatch.id }
+      }
     }
   }
 
@@ -193,6 +199,7 @@ async function uploadImageToSupabase(filePath: string, fileName: string): Promis
 async function processImages() {
   console.log('========================================')
   console.log('Processing NEW images from:', SOURCE_DIR)
+  console.log('Using: Gemini 3 Pro Preview (best accuracy)')
   console.log('========================================')
 
   if (!VOYAGE_API_KEY) {
@@ -238,8 +245,8 @@ async function processImages() {
       else if (lowerName.includes('.gif')) mimeType = 'image/gif'
       else if (lowerName.includes('.webp')) mimeType = 'image/webp'
 
-      // Extract song info using Gemini
-      console.log('  1. Extracting with Google Gemini OCR...')
+      // Extract song info using Gemini 3 Pro
+      console.log('  1. Extracting with Gemini 3 Pro Preview...')
       const info = await extractSongInfoFromImage(imageBase64, mimeType)
       console.log(`     Title: ${info.title}`)
       console.log(`     Key: ${info.key || 'Unknown'}`)
@@ -306,9 +313,9 @@ async function processImages() {
         processed++
       }
 
-      // Rate limiting
-      console.log('     Waiting 3s...')
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // Rate limiting - Gemini 3 Pro has stricter limits
+      console.log('     Waiting 5s...')
+      await new Promise(resolve => setTimeout(resolve, 5000))
 
     } catch (error) {
       console.error(`  Error processing ${fileName}:`, error)

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "process-images": "tsx scripts/process-images.ts"
+    "process-images": "tsx scripts/process-images.ts",
+    "add-song": "tsx scripts/add-single-song.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

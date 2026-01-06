@@ -1,0 +1,15 @@
+{
+  "_comment": "Reference data for songs pending processing. Use 'npm run add-song <image-path>' to process with Gemini OCR.",
+  "songs": [
+    {
+      "title": "하늘 위에 주님밖에",
+      "title_korean": "하늘 위에 주님밖에",
+      "title_english": "Above the Heavens Only the Lord",
+      "key": "G",
+      "artist": "Eugene Greco",
+      "source": "KaMU",
+      "status": "pending_image_upload",
+      "notes": "Save the sheet music image and run: npm run add-song <path-to-image>"
+    }
+  ]
+}
