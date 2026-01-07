@@ -220,7 +220,6 @@ export default function Home() {
             <button
               onClick={() => {
                 setMessages([])
-                setShowExamples(false)
               }}
               className="flex items-center gap-2 sm:gap-3 hover:opacity-80 active:scale-95 transition-all duration-200 cursor-pointer"
             >
