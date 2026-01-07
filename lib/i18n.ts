@@ -62,7 +62,7 @@ export const translations: Record<Language, Translations> = {
     english: 'English',
 
     // Chat
-    welcomeMessage: '찬양 악보를 찾아드릴게요',
+    welcomeMessage: '어떤 악보 찾으세요?',
     errorMessage: '죄송합니다, 오류가 발생했습니다. 다시 시도해주세요.',
     searching: '검색 중...',
     quickSearch: '빠른 검색',
