@@ -14,7 +14,7 @@ import { ImageCard } from '@/components/ImageCard'
 import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
-import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 // Carousel disabled - using grid layout instead
 
 interface RelatedPage {
@@ -57,6 +57,7 @@ export default function Home() {
   const [currentQuery, setCurrentQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [examplesOpen, setExamplesOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isComposingRef = useRef(false)
@@ -285,16 +286,41 @@ export default function Home() {
       {isInitialState ? (
         <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-3xl mx-auto">
           {/* Centered Branding */}
-          <div className="text-center mb-8 sm:mb-12 animate-fade-in-up">
+          <div className="text-center mb-6 sm:mb-10 animate-fade-in-up">
             <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/25 mb-4 sm:mb-6">
               <Music className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
             </div>
             <h2 className="text-xl sm:text-3xl font-bold text-foreground mb-2">
-              {t.welcomeMessage.split('!')[0]}!
+              {t.welcomeMessage}
             </h2>
-            <p className="text-sm sm:text-base text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground mb-1">
               {t.inputHint}
             </p>
+            <p className="text-xs sm:text-sm text-muted-foreground/70">
+              {t.inputSubHint}
+            </p>
+
+            {/* Collapsible Examples */}
+            <div className="mt-4">
+              <button
+                onClick={() => setExamplesOpen(!examplesOpen)}
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${examplesOpen ? 'rotate-180' : ''}`} />
+                {t.examplesTitle}
+              </button>
+              {examplesOpen && (
+                <div className="mt-3 p-3 sm:p-4 bg-muted/50 rounded-xl text-left max-w-md mx-auto animate-fade-in">
+                  <ul className="space-y-2">
+                    {t.examples.map((example, i) => (
+                      <li key={i} className="text-xs sm:text-sm text-muted-foreground">
+                        {example}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Large Centered Search Input */}

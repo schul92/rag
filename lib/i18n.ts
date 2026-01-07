@@ -20,6 +20,9 @@ export interface Translations {
   quickSearch: string
   inputPlaceholder: string
   inputHint: string
+  inputSubHint: string
+  examplesTitle: string
+  examples: string[]
   keySelection: string
   me: string
   pages: string
@@ -59,12 +62,19 @@ export const translations: Record<Language, Translations> = {
     english: 'English',
 
     // Chat
-    welcomeMessage: '안녕하세요! 찬양 악보를 찾아드릴게요.',
+    welcomeMessage: '찬양 악보를 찾아드릴게요',
     errorMessage: '죄송합니다, 오류가 발생했습니다. 다시 시도해주세요.',
     searching: '검색 중...',
     quickSearch: '빠른 검색',
-    inputPlaceholder: '곡 제목, 가사, 또는 "G키 5개"...',
-    inputHint: '제목 · 기억나는 가사 · "C키 3개" 형식으로 검색 (기본 2곡)',
+    inputPlaceholder: '검색어 입력...',
+    inputHint: '곡 제목, 기억나는 가사, 또는 키로 검색하세요',
+    inputSubHint: '기본 2곡 · 더 원하면 "5개" 처럼 숫자 추가',
+    examplesTitle: '검색 예시 보기',
+    examples: [
+      '곡 제목 → "나는 믿네", "Holy Forever"',
+      '가사 일부 → "주님의 사랑이", "나 같은 죄인"',
+      '키 검색 → "G키 5개", "C key 3"',
+    ],
     keySelection: '키 선택:',
     me: '나',
 
@@ -110,12 +120,19 @@ export const translations: Record<Language, Translations> = {
     english: 'English',
 
     // Chat
-    welcomeMessage: 'Hello! I\'ll help you find worship chord sheets.',
+    welcomeMessage: 'Find worship chord sheets',
     errorMessage: 'Sorry, an error occurred. Please try again.',
     searching: 'Searching...',
     quickSearch: 'Quick Search',
-    inputPlaceholder: 'Song title, lyrics, or "G key 5"...',
-    inputHint: 'Title · lyrics you remember · "C key 3" format (default: 2 songs)',
+    inputPlaceholder: 'Search...',
+    inputHint: 'Search by song title, lyrics, or key',
+    inputSubHint: 'Default: 2 songs · Add "5" for more',
+    examplesTitle: 'See examples',
+    examples: [
+      'Song title → "Holy Forever", "나는 믿네"',
+      'Partial lyrics → "Amazing grace", "주님의 사랑"',
+      'By key → "G key 5", "C키 3개"',
+    ],
     keySelection: 'Select key:',
     me: 'Me',
 
