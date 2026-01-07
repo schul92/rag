@@ -241,22 +241,25 @@ export default function Home() {
 
             {/* Refresh & Settings Buttons */}
             <div className="flex items-center gap-1">
-              {/* Refresh Button - always visible, disabled when no messages */}
-              <button
-                onClick={() => setMessages([])}
-                disabled={messages.length === 0}
-                className="h-9 w-9 sm:h-10 sm:w-10 liquid-glass rounded-xl disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center"
-              >
-                <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-              </button>
+              {/* Refresh Button - only show when there are messages */}
+              {messages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setMessages([])}
+                  className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors"
+                >
+                  <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                </Button>
+              )}
 
               {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
               {isDesktop ? (
                 <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                   <DialogTrigger asChild>
-                    <button className="h-9 w-9 sm:h-10 sm:w-10 liquid-glass rounded-xl flex items-center justify-center">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
                       <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                    </button>
+                    </Button>
                   </DialogTrigger>
                 <DialogContent className="w-[90vw] max-w-sm sm:max-w-md rounded-2xl">
                   <DialogHeader>
@@ -274,9 +277,9 @@ export default function Home() {
             ) : (
               <Drawer open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DrawerTrigger asChild>
-                  <button className="h-9 w-9 sm:h-10 sm:w-10 liquid-glass rounded-xl flex items-center justify-center">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
                     <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                  </button>
+                  </Button>
                 </DrawerTrigger>
                 <DrawerContent>
                   <DrawerHeader className="text-center">
