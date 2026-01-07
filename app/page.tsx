@@ -15,6 +15,7 @@ import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
+import LiquidGlass from 'liquid-glass-react'
 // Carousel disabled - using grid layout instead
 
 interface RelatedPage {
@@ -241,25 +242,35 @@ export default function Home() {
 
             {/* Refresh & Settings Buttons */}
             <div className="flex items-center gap-1">
-              {/* Refresh Button - only show when there are messages */}
-              {messages.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setMessages([])}
-                  className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors"
-                >
-                  <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                </Button>
-              )}
+              {/* Refresh Button - always visible, disabled when no messages */}
+              <LiquidGlass
+                onClick={messages.length > 0 ? () => setMessages([]) : undefined}
+                cornerRadius={12}
+                padding="8px"
+                blurAmount={0.1}
+                saturation={120}
+                elasticity={0.3}
+                className={`cursor-pointer ${messages.length === 0 ? 'opacity-30 pointer-events-none' : ''}`}
+              >
+                <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+              </LiquidGlass>
 
               {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
               {isDesktop ? (
                 <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
-                      <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                    </Button>
+                    <div>
+                      <LiquidGlass
+                        cornerRadius={12}
+                        padding="8px"
+                        blurAmount={0.1}
+                        saturation={120}
+                        elasticity={0.3}
+                        className="cursor-pointer"
+                      >
+                        <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                      </LiquidGlass>
+                    </div>
                   </DialogTrigger>
                 <DialogContent className="w-[90vw] max-w-sm sm:max-w-md rounded-2xl">
                   <DialogHeader>
@@ -277,9 +288,18 @@ export default function Home() {
             ) : (
               <Drawer open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DrawerTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
-                    <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                  </Button>
+                  <div>
+                    <LiquidGlass
+                      cornerRadius={12}
+                      padding="8px"
+                      blurAmount={0.1}
+                      saturation={120}
+                      elasticity={0.3}
+                      className="cursor-pointer"
+                    >
+                      <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                    </LiquidGlass>
+                  </div>
                 </DrawerTrigger>
                 <DrawerContent>
                   <DrawerHeader className="text-center">
