@@ -14,7 +14,7 @@ import { ImageCard } from '@/components/ImageCard'
 import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
-import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
 // Carousel disabled - using grid layout instead
 
 interface RelatedPage {
@@ -239,14 +239,28 @@ export default function Home() {
               </div>
             </button>
 
-            {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
-            {isDesktop ? (
-              <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
-                    <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                  </Button>
-                </DialogTrigger>
+            {/* Refresh & Settings Buttons */}
+            <div className="flex items-center gap-1">
+              {/* Refresh Button - only show when there are messages */}
+              {messages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setMessages([])}
+                  className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors"
+                >
+                  <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                </Button>
+              )}
+
+              {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
+              {isDesktop ? (
+                <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
+                      <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="w-[90vw] max-w-sm sm:max-w-md rounded-2xl">
                   <DialogHeader>
                     <DialogTitle className="text-lg">{t.settings}</DialogTitle>
@@ -283,6 +297,7 @@ export default function Home() {
                 </DrawerContent>
               </Drawer>
             )}
+            </div>
           </div>
         </div>
       </header>
