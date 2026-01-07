@@ -404,7 +404,7 @@ export default function Home() {
                       </Avatar>
                     )}
 
-                    <div className={`max-w-[85%] sm:max-w-[80%] ${msg.role === 'user' ? 'order-first' : ''}`}>
+                    <div className={`max-w-[85%] sm:max-w-[80%] ${msg.role === 'user' ? 'order-first' : ''} ${msg.role === 'assistant' && msg.images && msg.images.length > 0 ? 'min-w-[280px] sm:min-w-[450px] md:min-w-[550px]' : ''}`}>
                       <Card
                         className={`px-3 sm:px-4 py-2.5 sm:py-3 shadow-sm ${
                           msg.role === 'user'
