@@ -73,7 +73,7 @@ export const translations: Record<Language, Translations> = {
     examples: [
       '곡 제목 → "나는 믿네", "Holy Forever"',
       '가사 일부 → "주님의 사랑이", "나 같은 죄인"',
-      '키 검색 → "G키 5개", "C key 3"',
+      '키 검색 → "G키 5개", "A키 찬양"',
     ],
     keySelection: '키 선택:',
     me: '나',
@@ -131,7 +131,7 @@ export const translations: Record<Language, Translations> = {
     examples: [
       'Song title → "Holy Forever", "나는 믿네"',
       'Partial lyrics → "Amazing grace", "주님의 사랑"',
-      'By key → "G key 5", "C키 3개"',
+      'By key → "G key songs", "A키 5개"',
     ],
     keySelection: 'Select key:',
     me: 'Me',

@@ -389,7 +389,7 @@ export default function Home() {
           {/* Messages Area - Scrollable */}
           <div className="flex-1 max-w-4xl mx-auto px-3 sm:px-4 w-full overflow-hidden">
             <ScrollArea className="h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" ref={scrollRef}>
-              <div className="space-y-4 sm:space-y-6 py-4 sm:py-6 pb-20">
+              <div className="space-y-4 sm:space-y-6 py-4 sm:py-6 pb-20 pr-2 sm:pr-3">
                 {messages.map((msg, index) => (
                   <div
                     key={msg.id}
