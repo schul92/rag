@@ -553,10 +553,28 @@ export default function Home() {
           {/* Input Area - Fixed at bottom */}
           <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-4 sm:pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6">
             <div className="max-w-4xl mx-auto px-3 sm:px-4">
+              {/* Collapsible Tips - Above input in chat view */}
+              <div className="mb-2">
+                <button
+                  onClick={() => setExamplesOpen(!examplesOpen)}
+                  className="w-full flex items-center justify-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                >
+                  <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${examplesOpen ? 'rotate-180' : ''}`} />
+                  {t.examplesTitle}
+                </button>
+                {examplesOpen && (
+                  <div className="mt-2 p-2.5 sm:p-3 bg-muted/80 backdrop-blur-sm rounded-xl text-left animate-fade-in border border-border/50">
+                    <ul className="space-y-1.5">
+                      {t.examples.map((example, i) => (
+                        <li key={i} className="text-[10px] sm:text-xs text-muted-foreground">
+                          {example}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
               <ChatInput onSend={handleSend} disabled={isLoading} />
-              <p className="text-center text-[10px] sm:text-xs text-muted-foreground mt-2">
-                {t.inputHint}
-              </p>
             </div>
           </div>
         </>
