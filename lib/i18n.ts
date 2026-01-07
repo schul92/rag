@@ -59,12 +59,12 @@ export const translations: Record<Language, Translations> = {
     english: 'English',
 
     // Chat
-    welcomeMessage: '안녕하세요! 찬양팀 악보 검색 도우미입니다. 찾고 싶은 곡 제목을 입력해주세요.',
+    welcomeMessage: '안녕하세요! 찬양 악보를 찾아드릴게요.',
     errorMessage: '죄송합니다, 오류가 발생했습니다. 다시 시도해주세요.',
     searching: '검색 중...',
     quickSearch: '빠른 검색',
-    inputPlaceholder: '곡 제목을 입력하세요...',
-    inputHint: '곡 제목을 입력하면 악보를 찾아드립니다',
+    inputPlaceholder: '곡 제목, 가사, 또는 "G키 5개"...',
+    inputHint: '제목 · 기억나는 가사 · "C키 3개" 형식으로 검색 (기본 2곡)',
     keySelection: '키 선택:',
     me: '나',
 
@@ -110,12 +110,12 @@ export const translations: Record<Language, Translations> = {
     english: 'English',
 
     // Chat
-    welcomeMessage: 'Hello! I\'m your worship song sheet finder. Enter a song title to search.',
+    welcomeMessage: 'Hello! I\'ll help you find worship chord sheets.',
     errorMessage: 'Sorry, an error occurred. Please try again.',
     searching: 'Searching...',
     quickSearch: 'Quick Search',
-    inputPlaceholder: 'Enter song title...',
-    inputHint: 'Enter a song title to find chord sheets',
+    inputPlaceholder: 'Song title, lyrics, or "G key 5"...',
+    inputHint: 'Title · lyrics you remember · "C key 3" format (default: 2 songs)',
     keySelection: 'Select key:',
     me: 'Me',
 
