@@ -241,23 +241,22 @@ export default function Home() {
 
             {/* Refresh & Settings Buttons */}
             <div className="flex items-center gap-1">
-              {/* Refresh Button - only show when there are messages */}
-              {messages.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setMessages([])}
-                  className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors"
-                >
-                  <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                </Button>
-              )}
+              {/* Refresh Button - always visible, disabled when no messages */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMessages([])}
+                disabled={messages.length === 0}
+                className="h-9 w-9 sm:h-10 sm:w-10 liquid-glass rounded-xl disabled:opacity-30"
+              >
+                <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+              </Button>
 
               {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
               {isDesktop ? (
                 <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 liquid-glass rounded-xl">
                       <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                     </Button>
                   </DialogTrigger>
@@ -277,7 +276,7 @@ export default function Home() {
             ) : (
               <Drawer open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DrawerTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 hover:bg-muted transition-colors">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-10 sm:w-10 liquid-glass rounded-xl">
                     <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                   </Button>
                 </DrawerTrigger>

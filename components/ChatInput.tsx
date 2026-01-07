@@ -36,7 +36,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }
 
   return (
-    <div className="flex gap-2 sm:gap-3 items-center p-1.5 sm:p-2 bg-card rounded-xl sm:rounded-2xl shadow-lg border border-border">
+    <div className="flex gap-2 sm:gap-3 items-center p-1.5 sm:p-2 rounded-xl sm:rounded-2xl shadow-lg liquid-glass-input">
       <Input
         value={message}
         onChange={(e) => setMessage(e.target.value)}
@@ -51,7 +51,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         onClick={handleSend}
         disabled={disabled || !message.trim()}
         size="icon"
-        className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:opacity-50 shadow-lg shrink-0"
+        className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl liquid-glass-btn disabled:opacity-50 shrink-0 text-white"
       >
         <Send className="w-4 h-4 sm:w-5 sm:h-5" />
       </Button>
