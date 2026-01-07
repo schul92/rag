@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, KeyboardEvent, useRef } from 'react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Send } from 'lucide-react'
 import { useLanguage } from '@/components/LanguageProvider'
-import LiquidGlass from 'liquid-glass-react'
 
 interface ChatInputProps {
   onSend: (message: string) => void
@@ -36,14 +36,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }
 
   return (
-    <LiquidGlass
-      className="flex gap-2 sm:gap-3 items-center"
-      padding="6px 8px"
-      cornerRadius={16}
-      blurAmount={0.15}
-      saturation={120}
-      elasticity={0.25}
-    >
+    <div className="flex gap-2 sm:gap-3 items-center p-1.5 sm:p-2 bg-card rounded-xl sm:rounded-2xl shadow-lg border border-border">
       <Input
         value={message}
         onChange={(e) => setMessage(e.target.value)}
@@ -54,18 +47,14 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm sm:text-base placeholder:text-muted-foreground h-10 sm:h-12"
         disabled={disabled}
       />
-      <LiquidGlass
+      <Button
         onClick={handleSend}
         disabled={disabled || !message.trim()}
-        cornerRadius={12}
-        padding="10px"
-        blurAmount={0.1}
-        saturation={130}
-        elasticity={0.35}
-        className={`shrink-0 cursor-pointer ${disabled || !message.trim() ? 'opacity-50 pointer-events-none' : ''}`}
+        size="icon"
+        className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:opacity-50 shadow-lg shrink-0"
       >
-        <Send className="w-5 h-5 text-foreground" />
-      </LiquidGlass>
-    </LiquidGlass>
+        <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+      </Button>
+    </div>
   )
 }
