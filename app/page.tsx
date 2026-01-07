@@ -467,9 +467,9 @@ export default function Home() {
                           </p>
                           <div className={`grid gap-2 sm:gap-3 ${
                             msg.images.length <= 2
-                              ? 'grid-cols-2 max-w-md'
-                              : msg.images.length === 3
-                                ? 'grid-cols-2 sm:grid-cols-3 max-w-2xl'
+                              ? 'grid-cols-2'
+                              : msg.images.length <= 3
+                                ? 'grid-cols-2 sm:grid-cols-3'
                                 : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
                           }`}>
                             {msg.images.map((image) => (
