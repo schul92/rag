@@ -5,6 +5,7 @@ import { hybridSearch, RankedResult, normalizeKorean as normalizeKoreanHybrid } 
 import { rerank } from '@/lib/reranker'
 // Google Image Search fallback (no key detection - user sees key in image)
 import { searchGoogleImages } from '@/lib/google-image-search'
+import { createQuestionTracker } from '@/lib/question-tracker'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -756,6 +757,10 @@ export async function POST(request: NextRequest) {
     const conversationHistory = Array.isArray(history) ? history : []
 
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Initialize question tracker for analytics
+    const tracker = createQuestionTracker(supabase, request.headers.get('user-agent') || undefined)
+
     // Use language setting if provided, otherwise auto-detect
     const isKorean = language === 'en' ? false : (language === 'ko' ? true : isKoreanMessage(message))
     const needsHelp = needsClaudeAssist(message)
@@ -764,6 +769,16 @@ export async function POST(request: NextRequest) {
     // Check for key-based queries (e.g., "A 코드 찬양리스트")
     const keyQuery = detectKeyQuery(message)
     const requestedKey = keyQuery.requestedKey || extractRequestedKey(message)
+
+    // Track the question for analytics
+    tracker.setQuery(message, isKorean ? 'ko' : 'en')
+    tracker.setClassification({
+      isKeyQuery: keyQuery.isKeyQuery,
+      requestedKey: keyQuery.requestedKey || requestedKey || undefined,
+      requestedCount: keyQuery.requestedCount,
+      isSpecificSong,
+      needsHelp,
+    })
 
     let searchResults: Array<{
       id: string
@@ -834,6 +849,9 @@ export async function POST(request: NextRequest) {
     else {
       const cleanSearchTerms = extractSearchTerms(message)
       console.log(`[Search] Query: "${message}" -> Clean: "${cleanSearchTerms}"`)
+
+      // Track clean search terms for analytics
+      tracker.setClassification({ cleanSearchTerms })
 
       if (cleanSearchTerms.length >= 2) {
         // NEW: Use hybrid search with Reciprocal Rank Fusion
@@ -1286,6 +1304,24 @@ No matching songs were found in the database or web search. Use the conversation
       console.log(`     Available keys: ${img.availableKeys?.join(', ') || 'none'}`)
       console.log(`     Related pages: ${img.relatedPages?.length || 0}`)
     })
+
+    // Track search results and response for analytics
+    const isGoogleSearch = searchResults.length > 0 && searchResults[0].isFromGoogle
+    tracker.setSearchResults({
+      method: keyQuery.isKeyQuery && !hasSongQuery ? 'key_list' : isGoogleSearch ? 'google_fallback' : 'hybrid',
+      rawCount: searchResults.length,
+      groupedCount: groupedResults.length,
+      shownCount: allImages.length,
+      usedReranking: USE_RERANKING && searchResults.length > 0 && !isGoogleSearch,
+      usedClaudeFallback: usedClaude,
+    })
+    tracker.setResponse({
+      type: allImages.length === 0 ? 'no_results' : needsKeySelection ? 'key_selection' : 'results',
+      needsKeySelection,
+    })
+
+    // Save tracking data asynchronously (non-blocking)
+    tracker.save().catch(() => {})
 
     return NextResponse.json({
       message: assistantMessage,
