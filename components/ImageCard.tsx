@@ -71,8 +71,10 @@ export function ImageCard({
   // Detect platform for optimized download experience
   const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
-  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
-  const canShareFiles = typeof navigator !== 'undefined' && navigator.share && navigator.canShare?.({ files: [new File([], 'test.jpg', { type: 'image/jpeg' })] })
+  const canShareFiles = typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    typeof navigator.canShare === 'function' &&
+    navigator.canShare({ files: [new File([], 'test.jpg', { type: 'image/jpeg' })] })
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation()
