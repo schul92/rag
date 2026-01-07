@@ -217,7 +217,13 @@ export default function Home() {
       <header className="shrink-0 z-50 backdrop-blur-lg bg-background/80 border-b border-border">
         <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => {
+                setMessages([])
+                setShowExamples(false)
+              }}
+              className="flex items-center gap-2 sm:gap-3 hover:opacity-80 active:scale-95 transition-all duration-200 cursor-pointer"
+            >
               <div className="relative">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
                   <Music className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -226,13 +232,13 @@ export default function Home() {
                   <Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" />
                 </div>
               </div>
-              <div>
+              <div className="text-left">
                 <h1 className="text-lg sm:text-2xl font-bold text-foreground">
                   {t.appTitle}
                 </h1>
                 <p className="text-[10px] sm:text-xs text-muted-foreground tracking-wider">{t.appSubtitle}</p>
               </div>
-            </div>
+            </button>
 
             {/* Settings Button - Responsive: Dialog on desktop, Drawer on mobile */}
             {isDesktop ? (
