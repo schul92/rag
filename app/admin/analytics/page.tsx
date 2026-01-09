@@ -20,7 +20,8 @@ import {
   Zap,
   ExternalLink,
   Filter,
-  List
+  List,
+  Globe
 } from 'lucide-react'
 
 interface Summary {
@@ -293,7 +294,7 @@ export default function AnalyticsDashboard() {
         {activeTab === 'overview' ? (
           <>
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               <SummaryCard title="세션" value={summary?.totalSessions || 0} icon={Users} color="blue" />
               <SummaryCard title="검색" value={summary?.totalSearches || 0} icon={Search} color="amber" />
               <SummaryCard title="클릭" value={summary?.totalClicks || 0} icon={MousePointer} color="green" />
@@ -304,6 +305,13 @@ export default function AnalyticsDashboard() {
                 icon={AlertTriangle}
                 subtitle={`${summary?.zeroResultSearches || 0}건`}
                 color="red"
+              />
+              <SummaryCard
+                title="Google 검색"
+                value={summary?.googleFallbackCount || 0}
+                icon={Globe}
+                subtitle={`${summary?.googleFallbackRate || 0}%`}
+                color="blue"
               />
               <SummaryCard
                 title="응답시간"
