@@ -745,6 +745,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
   try {
     const { message, language, history } = await request.json()
 
@@ -1287,6 +1288,18 @@ No matching songs were found in the database or web search. Use the conversation
       console.log(`     Related pages: ${img.relatedPages?.length || 0}`)
     })
 
+    // Calculate similarity stats for analytics
+    const similarityScores = searchResults
+      .map(r => r.similarity)
+      .filter((s): s is number => typeof s === 'number' && s > 0)
+    const topSimilarityScore = similarityScores.length > 0
+      ? Math.max(...similarityScores)
+      : null
+    const avgSimilarityScore = similarityScores.length > 0
+      ? similarityScores.reduce((a, b) => a + b, 0) / similarityScores.length
+      : null
+    const isGoogleFallback = searchResults.length > 0 && searchResults[0].isFromGoogle === true
+
     return NextResponse.json({
       message: assistantMessage,
       images: allImages,
@@ -1298,6 +1311,11 @@ No matching songs were found in the database or web search. Use the conversation
         groupedCount: groupedResults.length,
         shownCount: allImages.length,
         needsHelp,
+        // Similarity tracking
+        topSimilarityScore,
+        avgSimilarityScore,
+        isGoogleFallback,
+        responseTimeMs: Date.now() - startTime,
       },
     })
   } catch (error) {

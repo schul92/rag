@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Music, X, Globe, Download, Share2, Check, ChevronLeft, ChevronRight, FileStack, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
+import { trackClick, trackDownload, updateViewDuration } from '@/lib/analytics'
 
 interface RelatedPage {
   id: string
@@ -27,6 +28,10 @@ interface ImageCardProps {
   relatedPages?: RelatedPage[]
   totalPages?: number
   availableKeys?: string[]
+  // Analytics props
+  songId?: string
+  searchId?: string | null
+  clickPosition?: number
 }
 
 export function ImageCard({
@@ -38,6 +43,9 @@ export function ImageCard({
   relatedPages = [],
   totalPages = 1,
   availableKeys = [],
+  songId,
+  searchId,
+  clickPosition,
 }: ImageCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -47,6 +55,19 @@ export function ImageCard({
   const [isDownloading, setIsDownloading] = useState(false)
   const transformRef = useRef<ReactZoomPanPinchRef>(null)
 
+  // Analytics tracking refs
+  const clickIdRef = useRef<string | null>(null)
+  const viewStartTimeRef = useRef<number | null>(null)
+
+  // Track view duration when dialog closes
+  useEffect(() => {
+    if (!isOpen && clickIdRef.current && viewStartTimeRef.current) {
+      const viewDurationMs = Date.now() - viewStartTimeRef.current
+      updateViewDuration(clickIdRef.current, viewDurationMs)
+      clickIdRef.current = null
+      viewStartTimeRef.current = null
+    }
+  }, [isOpen])
 
   const title = ocrText?.split('\n').find(line => line.trim().length > 0)?.substring(0, 30) || filename
 
@@ -95,6 +116,17 @@ export function ImageCard({
           title: `${title} 악보`,
         })
         toast.success('저장 완료!', { id: toastId })
+
+        // Track download
+        if (songId) {
+          trackDownload({
+            clickId: clickIdRef.current || undefined,
+            songId,
+            downloadType: 'single_page',
+            pageCount: 1,
+            songKey: currentPage.songKey,
+          })
+        }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           toast.dismiss(toastId)
@@ -127,6 +159,17 @@ export function ImageCard({
       document.body.removeChild(a)
       window.URL.revokeObjectURL(downloadUrl)
       toast.success('다운로드 완료!', { id: toastId })
+
+      // Track download
+      if (songId) {
+        trackDownload({
+          clickId: clickIdRef.current || undefined,
+          songId,
+          downloadType: 'single_page',
+          pageCount: 1,
+          songKey: currentPage.songKey,
+        })
+      }
     } catch {
       // Final fallback: open in new tab
       toast(isMobile ? '이미지를 길게 눌러 저장하세요' : '다운로드 실패', {
@@ -163,6 +206,17 @@ export function ImageCard({
             title: `${title} 악보 (${allPages.length}페이지)`,
           })
           toast.success('저장 완료!', { id: toastId })
+
+          // Track download (all pages)
+          if (songId) {
+            trackDownload({
+              clickId: clickIdRef.current || undefined,
+              songId,
+              downloadType: 'all_pages',
+              pageCount: allPages.length,
+              songKey,
+            })
+          }
         } else {
           // Fallback: share one at a time
           toast('한 장씩 저장해 주세요', { id: toastId, icon: '💡', duration: 3000 })
@@ -204,6 +258,17 @@ export function ImageCard({
 
     if (successCount === allPages.length) {
       toast.success(`전체 ${allPages.length}페이지 다운로드 완료!`, { id: toastId })
+
+      // Track download (all pages)
+      if (songId) {
+        trackDownload({
+          clickId: clickIdRef.current || undefined,
+          songId,
+          downloadType: 'all_pages',
+          pageCount: allPages.length,
+          songKey,
+        })
+      }
     } else {
       toast.warning(`${successCount}/${allPages.length}페이지 다운로드됨`, { id: toastId })
     }
@@ -222,6 +287,17 @@ export function ImageCard({
           url: currentPage.url,
         })
         toast.success('공유 완료!')
+
+        // Track share
+        if (songId) {
+          trackDownload({
+            clickId: clickIdRef.current || undefined,
+            songId,
+            downloadType: 'share',
+            pageCount: 1,
+            songKey: currentPage.songKey,
+          })
+        }
       } catch {
         // User cancelled - no toast needed
       }
@@ -266,8 +342,20 @@ export function ImageCard({
 
   // Simple click handler - Embla carousel handles drag vs click automatically
   // NO manual touch handling needed - browsers prevent clicks during swipe
-  const handleClick = () => {
+  const handleClick = async () => {
     setIsOpen(true)
+    viewStartTimeRef.current = Date.now()
+
+    // Track click event
+    if (songId) {
+      const clickId = await trackClick({
+        searchId: searchId || undefined,
+        songId,
+        clickPosition,
+        clickType: 'view',
+      })
+      clickIdRef.current = clickId
+    }
   }
 
   return (

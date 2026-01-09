@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   images: {
@@ -41,4 +42,22 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Organization and project from Sentry
+  org: process.env.SENTRY_ORG || "zoe-studio-llc",
+  project: process.env.SENTRY_PROJECT || "javascript-nextjs",
+
+  // Auth token for source map uploads
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Tunnel route to bypass ad-blockers (sends errors via your server)
+  tunnelRoute: "/monitoring",
+
+  // Suppress source map uploading logs during build
+  silent: !process.env.CI,
+
+  // Source maps configuration
+  sourcemaps: {
+    disable: process.env.NODE_ENV !== "production",
+  },
+});

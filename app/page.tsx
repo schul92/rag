@@ -15,6 +15,7 @@ import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
+import { trackSession, trackSearch, trackKeySelection } from '@/lib/analytics'
 // Carousel disabled - using grid layout instead
 
 interface RelatedPage {
@@ -44,6 +45,7 @@ interface Message {
   images?: ChatImage[]
   keyOptions?: string[]  // Available keys for user to select
   googleSearchUrl?: string  // URL to Google Images when API limit reached
+  searchId?: string | null  // Analytics: search ID for this result set
 }
 
 export default function Home() {
@@ -61,11 +63,21 @@ export default function Home() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isComposingRef = useRef(false)
+  const lastSearchIdRef = useRef<string | null>(null)
 
   // Prevent hydration mismatch from browser extensions (like Dark Reader)
   useEffect(() => {
     setMounted(true)
+    // Initialize analytics session
+    trackSession(language)
   }, [])
+
+  // Re-track session when language changes
+  useEffect(() => {
+    if (mounted) {
+      trackSession(language)
+    }
+  }, [language, mounted])
 
   // Initialize welcome message with current language
   useEffect(() => {
@@ -154,6 +166,23 @@ export default function Home() {
 
       const data = await response.json()
 
+      // Track search event (fire and forget)
+      const searchId = await trackSearch({
+        query: message,
+        language: language as 'ko' | 'en',
+        resultCount: data.images?.length || 0,
+        responseTimeMs: data._debug?.responseTimeMs || 0,
+        searchType: data._debug?.searchType || 'title',
+        resultSongIds: data.images?.map((img: ChatImage) => img.id) || [],
+        requestedKey: data._debug?.requestedKey,
+        isZeroResult: !data.images || data.images.length === 0,
+        // Similarity tracking
+        topSimilarityScore: data._debug?.topSimilarityScore,
+        avgSimilarityScore: data._debug?.avgSimilarityScore,
+        isGoogleFallback: data._debug?.isGoogleFallback || false
+      })
+      lastSearchIdRef.current = searchId
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -161,6 +190,7 @@ export default function Home() {
         images: data.images,
         keyOptions: data.needsKeySelection ? data.availableKeys : undefined,
         googleSearchUrl: data.googleSearchUrl,  // For API limit fallback
+        searchId,  // Analytics: link to search record
       }
       setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
@@ -445,7 +475,15 @@ export default function Home() {
                                 key={key}
                                 variant="outline"
                                 className="cursor-pointer text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-amber-300 dark:border-amber-700 hover:from-amber-100 hover:to-orange-100 dark:hover:from-amber-800/40 dark:hover:to-orange-800/40 hover:scale-105 transition-all duration-200 active:scale-95"
-                                onClick={() => handleSend(`${key} 키`)}
+                                onClick={() => {
+                                  // Track key selection
+                                  trackKeySelection({
+                                    searchId: lastSearchIdRef.current || undefined,
+                                    selectedKey: key,
+                                    availableKeys: msg.keyOptions || []
+                                  })
+                                  handleSend(`${key} 키`)
+                                }}
                               >
                                 <Music className="w-3 h-3 mr-1 text-amber-600 dark:text-amber-400" />
                                 {key}
@@ -492,7 +530,7 @@ export default function Home() {
                                 ? 'grid-cols-2 sm:grid-cols-3'
                                 : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
                           }`}>
-                            {msg.images.map((image) => (
+                            {msg.images.map((image, index) => (
                               <ImageCard
                                 key={image.id}
                                 url={image.url}
@@ -503,6 +541,9 @@ export default function Home() {
                                 relatedPages={image.relatedPages}
                                 totalPages={image.totalPages}
                                 availableKeys={image.availableKeys}
+                                songId={image.id}
+                                searchId={msg.searchId}
+                                clickPosition={index + 1}
                               />
                             ))}
                           </div>

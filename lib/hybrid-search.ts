@@ -11,6 +11,58 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 
+/**
+ * Fetch popularity scores from analytics data
+ * Uses the song_popularity materialized view for fast lookups
+ */
+async function getPopularityScores(
+  supabase: SupabaseClient,
+  songIds: string[]
+): Promise<Map<string, number>> {
+  if (songIds.length === 0) return new Map()
+
+  try {
+    const { data, error } = await supabase
+      .from('song_popularity')
+      .select('song_id, popularity_score')
+      .in('song_id', songIds)
+
+    if (error || !data) return new Map()
+
+    // Normalize scores to 0-1 range for blending with RRF
+    const maxScore = Math.max(...data.map(d => d.popularity_score), 1)
+    return new Map(
+      data.map(d => [d.song_id, d.popularity_score / maxScore])
+    )
+  } catch {
+    return new Map()
+  }
+}
+
+/**
+ * Apply popularity boost to search results
+ * Blends relevance score (RRF) with popularity score
+ *
+ * @param results - RRF-ranked search results
+ * @param popularityScores - Map of song_id to normalized popularity score (0-1)
+ * @param weight - Popularity weight (default 0.15 = 15% popularity, 85% relevance)
+ */
+function applyPopularityBoost(
+  results: RankedResult[],
+  popularityScores: Map<string, number>,
+  weight: number = 0.15
+): RankedResult[] {
+  if (popularityScores.size === 0) return results
+
+  return results
+    .map(result => {
+      const popularity = popularityScores.get(result.id) || 0
+      const boostedScore = result.rrf_score * (1 - weight) + popularity * weight
+      return { ...result, rrf_score: boostedScore }
+    })
+    .sort((a, b) => b.rrf_score - a.rrf_score)
+}
+
 export interface SearchResult {
   id: string
   song_title: string | null
@@ -432,6 +484,8 @@ export async function hybridSearch(
     vectorThreshold?: number
     multilingualEmbedding?: number[]  // voyage-multilingual-2 embedding
     lyricsChunkLimit?: number
+    usePopularityBoost?: boolean  // Apply popularity boost from analytics
+    popularityWeight?: number  // Weight for popularity (0-1, default 0.15)
   } = {}
 ): Promise<RankedResult[]> {
   const {
@@ -445,7 +499,9 @@ export async function hybridSearch(
     fuzzyThreshold = 0.6,
     vectorThreshold = 0.5,
     multilingualEmbedding = [],
-    lyricsChunkLimit = 10
+    lyricsChunkLimit = 10,
+    usePopularityBoost = true,  // Enabled by default
+    popularityWeight = 0.15
   } = options
 
   console.log(`[Hybrid Search] Query: "${query}" (8-way search + multilingual)`)
@@ -500,6 +556,17 @@ export async function hybridSearch(
 
   const fusedResults = reciprocalRankFusion(searchResultsMap)
   console.log(`[Hybrid Search] RRF combined: ${fusedResults.length} unique results`)
+
+  // Apply popularity boost if enabled
+  if (usePopularityBoost && fusedResults.length > 0) {
+    const songIds = fusedResults.map(r => r.id)
+    const popularityScores = await getPopularityScores(supabase, songIds)
+
+    if (popularityScores.size > 0) {
+      console.log(`[Hybrid Search] Applying popularity boost (weight: ${popularityWeight}) for ${popularityScores.size} songs`)
+      return applyPopularityBoost(fusedResults, popularityScores, popularityWeight)
+    }
+  }
 
   return fusedResults
 }
