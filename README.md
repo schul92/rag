@@ -2,23 +2,34 @@
 
 A bilingual (Korean/English) AI-powered search system for finding worship song chord sheets. Built with RAG (Retrieval-Augmented Generation) architecture using **Gemini 3 Pro** for OCR/metadata extraction and **8-way hybrid search** with Cohere reranking.
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![React](https://img.shields.io/badge/React-19-61dafb)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green)
 ![Gemini](https://img.shields.io/badge/Gemini_3_Pro-OCR-yellow)
 ![Claude](https://img.shields.io/badge/Claude-Fallback-orange)
+![Sentry](https://img.shields.io/badge/Sentry-Monitoring-purple)
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
+  - [System Overview](#system-overview)
+  - [High-Level Data Flow](#high-level-data-flow)
+  - [Complete User Journey](#complete-user-journey)
 - [RAG Workflow](#rag-workflow)
+  - [RAG Pipeline Overview](#rag-pipeline-overview)
+  - [8-Way Hybrid Search Detail](#8-way-hybrid-search-detail)
 - [Database Schema](#database-schema)
+  - [Entity Relationship Diagram](#entity-relationship-diagram)
 - [Search Algorithm](#search-algorithm)
 - [API Reference](#api-reference)
 - [Setup Guide](#setup-guide)
 - [Cost Analysis](#cost-analysis)
+- [Analytics & Tracking Flow](#analytics--tracking-flow)
+- [Component Architecture](#component-architecture)
+- [Frontend State Flow](#frontend-state-flow)
 - [Project Structure](#project-structure)
 
 ---
@@ -39,19 +50,156 @@ PraiseFlow helps worship teams find chord sheets by searching through a database
 
 | Layer | Technology | Purpose | Cost |
 |-------|------------|---------|------|
-| **Frontend** | Next.js 15 (App Router) | React framework with server components | Free |
-| **UI** | shadcn/ui + Tailwind CSS | Component library and styling | Free |
+| **Frontend** | Next.js 16 (App Router) | React 19 framework with server components | Free |
+| **UI** | shadcn/ui + Tailwind CSS 4 | Component library and styling | Free |
 | **Database** | Supabase (PostgreSQL + pgvector) | Data storage + lyrics_chunks table | Free/$25mo |
 | **Vector Search** | Voyage AI | voyage-multilingual-2 (1024d Korean-optimized) | ~$0.0001/query |
 | **OCR/Extraction** | Gemini 3 Pro Vision | Extract metadata from chord sheet images | $1.25/1K images |
 | **Reranking** | Cohere Rerank 3 | Cross-encoder reranking (Vercel-optimized) | ~$0.002/query |
-| **AI Chat** | Claude Sonnet | Fallback when no results found | $3-15/1M tokens |
+| **AI Chat** | Claude Sonnet 4 | Fallback when no results found | $3-15/1M tokens |
 | **Storage** | Supabase Storage | Image file hosting | Included |
-| **Language** | TypeScript | Type-safe development | Free |
+| **Monitoring** | Sentry | Error tracking + session replay | Usage-based |
+| **Analytics** | Vercel Analytics | Usage tracking | Free on Vercel |
+| **Language** | TypeScript 5 | Type-safe development | Free |
 
 ---
 
 ## Architecture
+
+### System Overview
+
+```mermaid
+flowchart TB
+    subgraph CLIENT["🖥️ Client Browser"]
+        UI[React Chat Interface]
+        LC[Local Storage<br/>Session ID]
+    end
+
+    subgraph NEXTJS["⚡ Next.js 16 App Router"]
+        PAGE["/app/page.tsx<br/>Main Chat UI"]
+        API_CHAT["/api/chat<br/>Search & Response"]
+        API_ANALYTICS["/api/analytics/*<br/>Tracking Endpoints"]
+        API_ADMIN["/api/admin/*<br/>Dashboard APIs"]
+    end
+
+    subgraph SERVICES["🔌 External Services"]
+        VOYAGE[Voyage AI<br/>Embeddings]
+        COHERE[Cohere<br/>Reranking]
+        CLAUDE[Claude Sonnet<br/>AI Fallback]
+        GOOGLE[Google Images<br/>Search Fallback]
+        SENTRY[Sentry<br/>Error Tracking]
+    end
+
+    subgraph DATABASE["🗄️ Supabase PostgreSQL"]
+        SONGS[(song_images)]
+        ALIASES[(song_aliases)]
+        CHUNKS[(lyrics_chunks)]
+        ANALYTICS_DB[(analytics_*)]
+    end
+
+    UI --> PAGE
+    PAGE --> API_CHAT
+    PAGE --> API_ANALYTICS
+    API_CHAT --> VOYAGE
+    API_CHAT --> COHERE
+    API_CHAT --> CLAUDE
+    API_CHAT --> GOOGLE
+    API_CHAT --> SONGS
+    API_CHAT --> ALIASES
+    API_CHAT --> CHUNKS
+    API_ANALYTICS --> ANALYTICS_DB
+    API_ADMIN --> ANALYTICS_DB
+    UI --> SENTRY
+    LC --> UI
+```
+
+### High-Level Data Flow
+
+```mermaid
+flowchart LR
+    subgraph INGESTION["📥 One-Time Ingestion"]
+        IMG[📷 Images] --> GEMINI[Gemini 3 Pro<br/>OCR + Metadata]
+        GEMINI --> EMBED[Voyage AI<br/>Embeddings]
+        EMBED --> STORE[(Supabase)]
+    end
+
+    subgraph RUNTIME["🔄 Runtime Search"]
+        QUERY[🔍 User Query] --> HYBRID[8-Way Hybrid<br/>Search]
+        HYBRID --> RRF[RRF Fusion]
+        RRF --> RERANK[Cohere<br/>Reranking]
+        RERANK --> RESPONSE[📤 Response]
+    end
+
+    STORE --> HYBRID
+```
+
+### Complete User Journey
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 👤 User
+    participant F as 🖥️ Frontend
+    participant A as 🔌 /api/chat
+    participant H as 🔍 Hybrid Search
+    participant V as 🧠 Voyage AI
+    participant C as 🔄 Cohere
+    participant D as 🗄️ Database
+    participant G as 🌐 Google
+    participant AI as 🤖 Claude
+
+    U->>F: Type "광대하신 주 G키"
+    F->>F: Show loading spinner
+    F->>A: POST {message, language, history}
+
+    Note over A: Parse query & extract key
+    A->>A: detectKeyQuery() → key="G"
+    A->>A: extractSearchTerms() → "광대하신 주"
+
+    A->>V: Generate query embedding
+    V-->>A: 1024d vector
+
+    par 8 Parallel Searches
+        A->>D: 1. Exact ILIKE match
+        A->>D: 2. BM25 full-text search
+        A->>D: 3. Normalized Korean match
+        A->>D: 4. Alias lookup
+        A->>D: 5. Fuzzy Levenshtein
+        A->>D: 6. Vector similarity
+        A->>D: 7. OCR text search
+        A->>D: 8. Lyrics chunks search
+    end
+
+    D-->>A: Results from all methods
+
+    A->>A: RRF Fusion (combine ranks)
+    A->>C: Rerank top candidates
+    C-->>A: Reranked results
+
+    A->>A: Group by song + filter by key
+
+    alt Results Found
+        A->>A: generateSmartResponse()
+        A-->>F: {message, images[], availableKeys[]}
+    else No Results
+        A->>G: Google Image Search
+        alt Google has results
+            G-->>A: Image URLs
+            A-->>F: {message, googleResults[]}
+        else Google API limit
+            A->>AI: Claude assistance
+            AI-->>A: Helpful suggestions
+            A-->>F: {message, googleSearchUrl}
+        end
+    end
+
+    F->>F: Display results
+    F->>F: trackSearch() async
+    U->>F: Click on result
+    F->>F: trackClick() async
+```
+
+### Detailed Architecture Diagram
 
 ```
 +---------------------------------------------------------------------+
@@ -157,6 +305,81 @@ ONE-TIME BATCH: ~$0.62 (Gemini OCR for 498 images)
 1. **Retrieve** relevant documents from our database
 2. **Augment** the AI prompt with this context
 3. **Generate** a response based on actual data
+
+### RAG Pipeline Overview
+
+```mermaid
+flowchart TB
+    subgraph INGESTION["📥 Phase 1: Document Ingestion (One-Time)"]
+        direction LR
+        I1[📷 Chord Sheet Images] --> I2[🔍 Gemini 3 Pro Vision<br/>Extract Metadata]
+        I2 --> I3[🧠 Voyage AI<br/>Generate Embeddings]
+        I3 --> I4[(📚 Supabase<br/>Store Everything)]
+    end
+
+    subgraph RETRIEVAL["🔍 Phase 2: Retrieval (Every Query)"]
+        direction TB
+        R1[👤 User Query] --> R2[📝 Query Processing<br/>Normalize + Extract Key]
+        R2 --> R3[⚡ 8-Way Hybrid Search<br/>Promise.all Parallel]
+        R3 --> R4[🔀 RRF Fusion<br/>Combine Rankings]
+        R4 --> R5[🎯 Cohere Rerank<br/>Cross-Encoder]
+    end
+
+    subgraph GENERATION["💬 Phase 3: Generation"]
+        direction TB
+        G1{Results Found?}
+        G1 -->|Yes| G2[✨ Smart Response<br/>Template-based FREE]
+        G1 -->|No| G3[🌐 Google Fallback]
+        G3 --> G4{Found?}
+        G4 -->|No| G5[🤖 Claude AI<br/>Assistance]
+        G4 -->|Yes| G6[📤 Return Results]
+        G2 --> G6
+        G5 --> G6
+    end
+
+    INGESTION --> RETRIEVAL
+    RETRIEVAL --> GENERATION
+```
+
+### 8-Way Hybrid Search Detail
+
+```mermaid
+flowchart TB
+    QUERY["🔍 User Query<br/>'Holy Forever G키'"] --> PARSE
+
+    subgraph PARSE["📝 Query Parsing"]
+        P1[Extract Search Terms] --> P2[Detect Musical Key]
+        P2 --> P3[Normalize Korean Text]
+        P3 --> P4[Generate Embedding]
+    end
+
+    PARSE --> PARALLEL
+
+    subgraph PARALLEL["⚡ 8 Parallel Search Methods"]
+        direction TB
+        S1["1️⃣ EXACT<br/>ILIKE '%title%'"]
+        S2["2️⃣ BM25<br/>Full-Text Search"]
+        S3["3️⃣ NORMALIZED<br/>Korean Spacing"]
+        S4["4️⃣ ALIAS<br/>Cross-Language"]
+        S5["5️⃣ FUZZY<br/>Levenshtein"]
+        S6["6️⃣ VECTOR<br/>Semantic 1024d"]
+        S7["7️⃣ OCR TEXT<br/>Image Content"]
+        S8["8️⃣ LYRICS<br/>Chunk Search"]
+    end
+
+    PARALLEL --> RRF
+
+    subgraph RRF["🔀 Reciprocal Rank Fusion"]
+        direction LR
+        F1["Score = Σ 1/(60 + rank)"]
+        F2["Multi-method boost"]
+    end
+
+    RRF --> RERANK["🎯 Cohere Reranking<br/>rerank-multilingual-v3.0"]
+    RERANK --> GROUP["📚 Group by Song<br/>Multi-page Detection"]
+    GROUP --> FILTER["🎹 Filter by Key<br/>If requested"]
+    FILTER --> RESULT["📤 Final Results"]
+```
 
 ### Our RAG Implementation
 
@@ -305,6 +528,88 @@ ONE-TIME BATCH: ~$0.62 (Gemini OCR for 498 images)
 ---
 
 ## Database Schema
+
+### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    song_images ||--o{ lyrics_chunks : "has many"
+    song_images ||--o{ song_aliases : "has many"
+    song_images ||--o{ analytics_clicks : "tracks"
+    song_images ||--o{ analytics_downloads : "tracks"
+    analytics_sessions ||--o{ analytics_searches : "contains"
+    analytics_sessions ||--o{ analytics_clicks : "contains"
+    analytics_sessions ||--o{ analytics_downloads : "contains"
+
+    song_images {
+        uuid id PK
+        text image_url
+        text original_filename
+        text song_title
+        text song_title_korean
+        text song_title_english
+        text song_key
+        text ocr_text
+        vector embedding
+        uuid song_group_id
+        int page_number
+        timestamp created_at
+    }
+
+    song_aliases {
+        uuid id PK
+        text song_title FK
+        text alias
+        varchar language
+        varchar alias_type
+    }
+
+    lyrics_chunks {
+        uuid id PK
+        uuid song_id FK
+        text chunk_text
+        int chunk_index
+        vector embedding
+    }
+
+    analytics_sessions {
+        uuid id PK
+        text session_id UK
+        text device_type
+        text language
+        text user_agent
+        timestamp created_at
+    }
+
+    analytics_searches {
+        uuid id PK
+        text session_id FK
+        text query
+        text query_normalized
+        int result_count
+        int response_time_ms
+        boolean is_zero_result
+        boolean is_google_fallback
+        timestamp created_at
+    }
+
+    analytics_clicks {
+        uuid id PK
+        text session_id FK
+        uuid song_id FK
+        int position
+        int view_duration_ms
+        timestamp created_at
+    }
+
+    analytics_downloads {
+        uuid id PK
+        text session_id FK
+        uuid song_id FK
+        text song_key
+        timestamp created_at
+    }
+```
 
 ### Tables
 
@@ -646,6 +951,145 @@ Open http://localhost:3000
 | Claude Chat (fallback) | ~$0.003 | Only when no results |
 
 **Average cost per search: ~$0.002** (Voyage + Cohere)
+
+---
+
+## Analytics & Tracking Flow
+
+```mermaid
+flowchart TB
+    subgraph USER["👤 User Actions"]
+        U1[Page Load] --> U2[Search Query]
+        U2 --> U3[View Results]
+        U3 --> U4[Click Image]
+        U4 --> U5[View Modal]
+        U5 --> U6[Download]
+        U3 --> U7[Select Key]
+    end
+
+    subgraph CLIENT["🖥️ Client-Side Tracking"]
+        direction TB
+        C1[trackSession<br/>Device, Language, UA]
+        C2[trackSearch<br/>Query, Results, Timing]
+        C3[trackClick<br/>Song ID, Position]
+        C4[updateViewDuration<br/>Time in Modal]
+        C5[trackDownload<br/>Song ID, Key]
+        C6[trackKeySelection<br/>Selected Key]
+    end
+
+    subgraph API["🔌 Analytics API"]
+        A1["/api/analytics/session"]
+        A2["/api/analytics/search"]
+        A3["/api/analytics/click"]
+        A4["/api/analytics/download"]
+        A5["/api/analytics/key-selection"]
+    end
+
+    subgraph DB["🗄️ Supabase Tables"]
+        D1[(analytics_sessions)]
+        D2[(analytics_searches)]
+        D3[(analytics_clicks)]
+        D4[(analytics_downloads)]
+        D5[(analytics_key_selections)]
+    end
+
+    U1 --> C1
+    U2 --> C2
+    U4 --> C3
+    U5 --> C4
+    U6 --> C5
+    U7 --> C6
+
+    C1 --> A1 --> D1
+    C2 --> A2 --> D2
+    C3 --> A3 --> D3
+    C4 --> A3 --> D3
+    C5 --> A4 --> D4
+    C6 --> A5 --> D5
+```
+
+---
+
+## Component Architecture
+
+```mermaid
+flowchart TB
+    subgraph LAYOUT["🏗️ Root Layout (layout.tsx)"]
+        direction TB
+        L1[ThemeProvider<br/>Dark/Light Mode]
+        L2[LanguageProvider<br/>Ko/En i18n]
+        L3[Toaster<br/>Notifications]
+        L4[Analytics<br/>Vercel + Sentry]
+    end
+
+    subgraph PAGE["📄 Main Page (page.tsx)"]
+        direction TB
+        P1[Chat Messages State]
+        P2[Loading State]
+        P3[Search Handler]
+        P4[Results Display]
+    end
+
+    subgraph COMPONENTS["🧩 Components"]
+        direction TB
+        C1[ChatInput<br/>IME Support]
+        C2[ImageCard<br/>Song Display]
+        C3[ImageModal<br/>Zoom/Pan Viewer]
+        C4[KeyBadge<br/>Musical Key]
+        C5[MultiPageNav<br/>Page Selector]
+    end
+
+    subgraph UI["🎨 UI Components (shadcn)"]
+        direction LR
+        UI1[Button]
+        UI2[Card]
+        UI3[Dialog]
+        UI4[Drawer]
+        UI5[Badge]
+        UI6[Progress]
+    end
+
+    LAYOUT --> PAGE
+    PAGE --> COMPONENTS
+    COMPONENTS --> UI
+
+    C1 -->|"onSend"| P3
+    P3 -->|"POST /api/chat"| API[API Route]
+    API -->|"Response"| P4
+    P4 --> C2
+    C2 -->|"onClick"| C3
+    C2 --> C4
+    C3 --> C5
+```
+
+---
+
+## Frontend State Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle: Page Load
+
+    Idle --> Loading: User submits query
+    Loading --> DisplayResults: Results found
+    Loading --> NoResults: No results
+    Loading --> Error: API Error
+
+    DisplayResults --> ImageModal: Click image
+    ImageModal --> DisplayResults: Close modal
+    DisplayResults --> KeySelection: Multiple keys available
+    KeySelection --> DisplayResults: Key selected
+
+    NoResults --> GoogleFallback: Show Google results
+    GoogleFallback --> Idle: User clicks link
+
+    DisplayResults --> Idle: New search
+    NoResults --> Idle: New search
+    Error --> Idle: Retry
+
+    ImageModal --> Download: Click download
+    Download --> ImageModal: Download complete
+```
 
 ---
 
