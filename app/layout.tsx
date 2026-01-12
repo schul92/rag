@@ -18,7 +18,25 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "찬양팀 악보",
-  description: "찬양팀 악보 검색 도우미",
+  description: "찬양팀 악보 검색 도우미 - AI-powered worship song chord sheet finder",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "찬양팀 악보",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
@@ -27,6 +45,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  themeColor: "#f97316",
 };
 
 export default function RootLayout({
