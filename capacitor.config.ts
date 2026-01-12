@@ -5,8 +5,8 @@ const config: CapacitorConfig = {
   appName: '찬양팀 악보',
   webDir: 'out',
   server: {
-    // Load from Vercel deployment (required for API routes)
-    url: 'https://findmyworship-dlo003vna-steve-songs-projects.vercel.app',
+    // Load from Vercel production deployment
+    url: 'https://findmyworship.vercel.app',
     cleartext: false,
   },
   ios: {
