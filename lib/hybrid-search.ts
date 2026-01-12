@@ -63,6 +63,65 @@ function applyPopularityBoost(
     .sort((a, b) => b.rrf_score - a.rrf_score)
 }
 
+/**
+ * Apply title match boost to prioritize results where the title matches the query.
+ * This ensures that even with RRF, a title match is always ranked highly.
+ *
+ * Handles Korean spacing variations like "이곳에" vs "이 곳에".
+ *
+ * Scoring:
+ * - Exact normalized match: +0.5 (huge boost, will be ranked #1)
+ * - Query contains title: +0.3 (user searching for the song)
+ * - Title contains query: +0.2 (partial match)
+ *
+ * @param results - RRF-ranked search results
+ * @param query - The original search query
+ */
+function applyTitleMatchBoost(
+  results: RankedResult[],
+  query: string
+): RankedResult[] {
+  const queryNorm = normalizeKorean(query)
+  if (queryNorm.length < 2) return results
+
+  return results
+    .map(result => {
+      const titleNorm = normalizeKorean(result.song_title || '')
+      const koreanNorm = normalizeKorean(result.song_title_korean || '')
+
+      let boost = 0
+
+      // Check main title
+      if (titleNorm.length > 0) {
+        if (titleNorm === queryNorm) {
+          boost = 0.5  // Exact match - huge boost
+        } else if (queryNorm.includes(titleNorm)) {
+          boost = Math.max(boost, 0.3)  // Query contains title
+        } else if (titleNorm.includes(queryNorm)) {
+          boost = Math.max(boost, 0.2)  // Title contains query
+        }
+      }
+
+      // Check Korean title too
+      if (koreanNorm.length > 0) {
+        if (koreanNorm === queryNorm) {
+          boost = Math.max(boost, 0.5)
+        } else if (queryNorm.includes(koreanNorm)) {
+          boost = Math.max(boost, 0.3)
+        } else if (koreanNorm.includes(queryNorm)) {
+          boost = Math.max(boost, 0.2)
+        }
+      }
+
+      if (boost > 0) {
+        console.log(`[Title Boost] "${result.song_title}" gets +${boost} boost (query: "${query}")`)
+      }
+
+      return { ...result, rrf_score: result.rrf_score + boost }
+    })
+    .sort((a, b) => b.rrf_score - a.rrf_score)
+}
+
 export interface SearchResult {
   id: string
   song_title: string | null
@@ -557,16 +616,20 @@ export async function hybridSearch(
   const fusedResults = reciprocalRankFusion(searchResultsMap)
   console.log(`[Hybrid Search] RRF combined: ${fusedResults.length} unique results`)
 
+  // CRITICAL: Apply title match boost FIRST to ensure title matches are prioritized
+  // This handles Korean spacing variations (e.g., "이곳에" vs "이 곳에")
+  let boostedResults = applyTitleMatchBoost(fusedResults, query)
+
   // Apply popularity boost if enabled
-  if (usePopularityBoost && fusedResults.length > 0) {
-    const songIds = fusedResults.map(r => r.id)
+  if (usePopularityBoost && boostedResults.length > 0) {
+    const songIds = boostedResults.map(r => r.id)
     const popularityScores = await getPopularityScores(supabase, songIds)
 
     if (popularityScores.size > 0) {
       console.log(`[Hybrid Search] Applying popularity boost (weight: ${popularityWeight}) for ${popularityScores.size} songs`)
-      return applyPopularityBoost(fusedResults, popularityScores, popularityWeight)
+      boostedResults = applyPopularityBoost(boostedResults, popularityScores, popularityWeight)
     }
   }
 
-  return fusedResults
+  return boostedResults
 }

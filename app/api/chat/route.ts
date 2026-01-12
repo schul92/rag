@@ -666,23 +666,36 @@ function groupResultsBySong(
     })
   }
 
-  // Sort by: 1) More pages first (more complete), 2) Has key info, 3) Similarity score
+  // Sort by: 1) HIGH similarity score first (title boost), 2) More pages, 3) Has key info, 4) Similarity
   grouped.sort((a, b) => {
-    // Priority 1: More pages = more complete version
+    const aScore = Math.max(...a.pages.map(p => p.similarity || 0))
+    const bScore = Math.max(...b.pages.map(p => p.similarity || 0))
+
+    // Priority 1: HIGH similarity score (> 0.1 indicates title boost)
+    // This ensures title matches always rank first regardless of page count
+    const aHasHighScore = aScore > 0.1
+    const bHasHighScore = bScore > 0.1
+    if (aHasHighScore !== bHasHighScore) {
+      return aHasHighScore ? -1 : 1  // High score wins
+    }
+    // If both have high scores, sort by score
+    if (aHasHighScore && bHasHighScore) {
+      return bScore - aScore
+    }
+
+    // Priority 2: More pages = more complete version
     if (b.totalPages !== a.totalPages) {
       return b.totalPages - a.totalPages
     }
 
-    // Priority 2: Has key information
+    // Priority 3: Has key information
     const aHasKey = a.availableKeys.length > 0 ? 1 : 0
     const bHasKey = b.availableKeys.length > 0 ? 1 : 0
     if (bHasKey !== aHasKey) {
       return bHasKey - aHasKey
     }
 
-    // Priority 3: Best similarity score
-    const aScore = Math.max(...a.pages.map(p => p.similarity || 0))
-    const bScore = Math.max(...b.pages.map(p => p.similarity || 0))
+    // Priority 4: Best similarity score
     return bScore - aScore
   })
 
