@@ -10,6 +10,7 @@ import { Music, X, Globe, Download, Share2, Check, ChevronLeft, ChevronRight, Fi
 import { toast } from 'sonner'
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
 import { trackClick, trackDownload, updateViewDuration } from '@/lib/analytics'
+import { useNative } from '@/hooks/useNative'
 
 interface RelatedPage {
   id: string
@@ -54,6 +55,7 @@ export function ImageCard({
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [isDownloading, setIsDownloading] = useState(false)
   const transformRef = useRef<ReactZoomPanPinchRef>(null)
+  const { onTap, onSelect, cacheSheet, share: nativeShare } = useNative()
 
   // Analytics tracking refs
   const clickIdRef = useRef<string | null>(null)
@@ -343,8 +345,21 @@ export function ImageCard({
   // Simple click handler - Embla carousel handles drag vs click automatically
   // NO manual touch handling needed - browsers prevent clicks during swipe
   const handleClick = async () => {
+    // Haptic feedback on tap
+    await onTap()
+
     setIsOpen(true)
     viewStartTimeRef.current = Date.now()
+
+    // Cache the sheet for offline viewing
+    if (songId) {
+      cacheSheet({
+        id: songId,
+        title: title,
+        imageUrl: url,
+        key: songKey,
+      })
+    }
 
     // Track click event
     if (songId) {

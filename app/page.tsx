@@ -11,9 +11,13 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ChatInput } from '@/components/ChatInput'
 import { ImageCard } from '@/components/ImageCard'
+import { NativeTabBar } from '@/components/NativeTabBar'
+import { RecentSheets } from '@/components/RecentSheets'
+import { SettingsView } from '@/components/SettingsView'
 import { useTheme } from '@/components/ThemeProvider'
 import { useLanguage } from '@/components/LanguageProvider'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { useNative, CachedSheet } from '@/hooks/useNative'
 import { Music, Sparkles, Search, Settings, Sun, Moon, Globe, Loader2, BookOpen, Heart, Star, X, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
 import { trackSession, trackSearch, trackKeySelection } from '@/lib/analytics'
 // Carousel disabled - using grid layout instead
@@ -52,6 +56,7 @@ export default function Home() {
   const { theme, toggleTheme } = useTheme()
   const { language, setLanguage, t } = useLanguage()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const { onTap, onSelect, onSuccess, cacheSheet, isNative } = useNative()
   const [mounted, setMounted] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -60,6 +65,7 @@ export default function Home() {
   const [searchInput, setSearchInput] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [examplesOpen, setExamplesOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'search' | 'recent' | 'settings'>('search')
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isComposingRef = useRef(false)
@@ -333,7 +339,7 @@ export default function Home() {
       </header>
 
       {/* Initial State - Modern Centered Layout */}
-      {isInitialState ? (
+      {activeTab === 'search' && isInitialState ? (
         <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-3xl mx-auto">
           {/* Centered Branding */}
           <div className="text-center mb-6 sm:mb-10 animate-fade-in-up">
@@ -402,8 +408,9 @@ export default function Home() {
                 <Button
                   size="icon"
                   className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 shadow-lg shrink-0"
-                  onClick={() => {
+                  onClick={async () => {
                     if (searchInput.trim()) {
+                      await onTap()
                       handleSend(searchInput.trim())
                       setSearchInput('')
                     }
@@ -421,7 +428,10 @@ export default function Home() {
               {quickSearches.map(({ term, icon: Icon, color }) => (
                 <button
                   key={term}
-                  onClick={() => handleSend(term)}
+                  onClick={async () => {
+                    await onTap()
+                    handleSend(term)
+                  }}
                   className="group flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-card hover:bg-muted border border-border hover:border-amber-500/50 rounded-xl sm:rounded-2xl transition-all duration-200 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${color} transition-transform group-hover:scale-110`} />
@@ -434,7 +444,7 @@ export default function Home() {
           {/* Bottom spacing for safe area */}
           <div className="h-[env(safe-area-inset-bottom)]" />
         </div>
-      ) : (
+      ) : activeTab === 'search' ? (
         <>
           {/* Messages Area - Scrollable */}
           <div className="flex-1 max-w-4xl mx-auto px-3 sm:px-4 w-full overflow-hidden">
@@ -645,6 +655,36 @@ export default function Home() {
             </div>
           </div>
         </>
+      ) : null}
+
+      {/* Recent Tab Content */}
+      {activeTab === 'recent' && (
+        <div className="flex-1 pt-4 pb-20">
+          <RecentSheets
+            onSelectSheet={(sheet: CachedSheet) => {
+              // Switch to search tab and show the sheet
+              setActiveTab('search')
+              // You could also trigger a search or show the sheet directly
+            }}
+          />
+        </div>
+      )}
+
+      {/* Settings Tab Content */}
+      {activeTab === 'settings' && (
+        <div className="flex-1 pt-4 pb-20">
+          <SettingsView />
+        </div>
+      )}
+
+      {/* Native Tab Bar - iOS style bottom navigation */}
+      {isNative && (
+        <NativeTabBar
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setActiveTab(tab)
+          }}
+        />
       )}
     </div>
   )
