@@ -17,7 +17,7 @@ const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' })
 
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY!
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const VOYAGE_MODEL = 'voyage-3-large'  // Best overall + multilingual, 1024d
+const VOYAGE_MODEL = 'voyage-3-large'  // 1024d - best overall + multilingual
 
 const BUCKET_NAME = 'song-sheets'
 
