@@ -1,6 +1,6 @@
 'use client';
 
-import { Moon, Sun, Globe, Info, Shield, Trash2, ExternalLink } from 'lucide-react';
+import { Moon, Sun, Globe, Info, Shield, Trash2, ExternalLink, HelpCircle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useLanguage } from '@/components/LanguageProvider';
 import { useNative } from '@/hooks/useNative';
@@ -77,6 +77,13 @@ export function SettingsView() {
             <SettingsRow
               icon={Shield}
               label="개인정보 처리방침"
+              showArrow
+            />
+          </Link>
+          <Link href="/support" className="block">
+            <SettingsRow
+              icon={HelpCircle}
+              label="고객 지원"
               showArrow
             />
           </Link>
