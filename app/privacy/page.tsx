@@ -73,8 +73,8 @@ export default function PrivacyPolicyPage() {
         <p className="text-muted-foreground">
           If you have any questions about this Privacy Policy, please contact us at:
           <br />
-          <a href="mailto:support@findmyworship.com" className="text-orange-500 hover:underline">
-            support@findmyworship.com
+          <a href="mailto:zoestudiollc@gmail.com" className="text-orange-500 hover:underline">
+            zoestudiollc@gmail.com
           </a>
         </p>
       </section>

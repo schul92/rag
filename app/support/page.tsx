@@ -89,8 +89,8 @@ export default function SupportPage() {
         <div className="mt-3 space-y-2">
           <p className="text-muted-foreground">
             <strong>Email:</strong>{' '}
-            <a href="mailto:support@findmyworship.com" className="text-orange-500 hover:underline">
-              support@findmyworship.com
+            <a href="mailto:zoestudiollc@gmail.com" className="text-orange-500 hover:underline">
+              zoestudiollc@gmail.com
             </a>
           </p>
         </div>
@@ -104,8 +104,8 @@ export default function SupportPage() {
         <p className="text-muted-foreground">
           Have an idea to improve the app? We&apos;d love to hear from you!
           Send your suggestions to{' '}
-          <a href="mailto:support@findmyworship.com" className="text-orange-500 hover:underline">
-            support@findmyworship.com
+          <a href="mailto:zoestudiollc@gmail.com" className="text-orange-500 hover:underline">
+            zoestudiollc@gmail.com
           </a>
           {' '}with &quot;Feature Request&quot; in the subject line.
         </p>
