@@ -88,6 +88,25 @@ export function SettingsView() {
         </SettingsSection>
       </div>
 
+      {/* Disclaimer */}
+      <div className="px-1">
+        <div className="bg-muted/50 rounded-xl p-4 text-xs text-muted-foreground space-y-2">
+          <p className="font-medium text-foreground/70">
+            {language === 'ko' ? '저작권 안내' : 'Copyright Notice'}
+          </p>
+          <p>
+            {language === 'ko'
+              ? '이 앱은 개인 예배 연습용으로만 사용됩니다. 모든 곡의 저작권은 해당 저작권자에게 있습니다. 공개 공연이나 상영을 위해서는 적절한 라이선스(예: CCLI)를 취득해야 합니다.'
+              : 'This app is intended for personal worship practice only. All song copyrights belong to their respective owners. Users are responsible for obtaining proper licenses (e.g., CCLI) for public performance or display.'}
+          </p>
+          <p>
+            {language === 'ko'
+              ? '저작권 관련 문의: zoestudiollc@gmail.com'
+              : 'Copyright concerns: zoestudiollc@gmail.com'}
+          </p>
+        </div>
+      </div>
+
       {/* Footer */}
       <div className="text-center pt-4 pb-20">
         <p className="text-xs text-muted-foreground">
