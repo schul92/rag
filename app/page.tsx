@@ -139,6 +139,12 @@ export default function Home() {
   }, [messages, isLoading])
 
   const handleSend = async (message: string) => {
+    // Prevent double-clicks
+    if (isLoading) return
+
+    // Set loading immediately to prevent race conditions
+    setIsLoading(true)
+
     // Store query for loading message
     setCurrentQuery(message)
 
@@ -150,10 +156,6 @@ export default function Home() {
 
     // Immediately show user message
     setMessages((prev) => [...prev, userMessage])
-
-    // Start loading after a tiny delay to ensure message renders first
-    await new Promise(resolve => setTimeout(resolve, 50))
-    setIsLoading(true)
 
     try {
       // Include last 3 messages for context (memory)
@@ -407,10 +409,11 @@ export default function Home() {
                 />
                 <Button
                   size="icon"
-                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 shadow-lg shrink-0"
-                  onClick={async () => {
+                  disabled={isLoading}
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 shadow-lg shrink-0 disabled:opacity-50"
+                  onClick={() => {
                     if (searchInput.trim()) {
-                      await onTap()
+                      onTap() // Fire-and-forget
                       handleSend(searchInput.trim())
                       setSearchInput('')
                     }
@@ -428,11 +431,12 @@ export default function Home() {
               {quickSearches.map(({ term, icon: Icon, color }) => (
                 <button
                   key={term}
-                  onClick={async () => {
-                    await onTap()
+                  disabled={isLoading}
+                  onClick={() => {
+                    onTap() // Fire-and-forget, don't await
                     handleSend(term)
                   }}
-                  className="group flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-card hover:bg-muted border border-border hover:border-amber-500/50 rounded-xl sm:rounded-2xl transition-all duration-200 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                  className="group flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-card hover:bg-muted border border-border hover:border-amber-500/50 rounded-xl sm:rounded-2xl transition-all duration-200 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${color} transition-transform group-hover:scale-110`} />
                   <span className="text-sm sm:text-base font-medium text-foreground">{term}</span>
