@@ -576,7 +576,7 @@ export default function Home() {
                 ))}
 
                 {isLoading && (
-                  <div className="flex gap-2 sm:gap-3 animate-fade-in-up">
+                  <div className="flex gap-2 sm:gap-3 animate-fade-in-up justify-start">
                     <Avatar className="w-8 h-8 sm:w-10 sm:h-10 border-2 border-border shrink-0">
                       <AvatarFallback className="bg-gradient-to-br from-amber-500 to-orange-600 text-white">
                         <Music className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
